@@ -1,1 +1,0 @@
-Airport postcards: drop 800x600 PNGs named KDEN.png, TNCM.png, LXGB.png, LOWI.png, VNLK.png, VQPR.png, LFLJ.png, LPMA.png, SABA.png, TFFJ.png, KAVX.png, KTEX.png, KASE.png, SCIP.png, LSZS.png into stamps/airports/ next to TwoFly.exe.
