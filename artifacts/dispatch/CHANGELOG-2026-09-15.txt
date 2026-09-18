@@ -1,0 +1,93 @@
+TwoFly — changes since 11:30 AM MDT, 15 Sep 2026
+================================================
+
+WEATHER
+- Standing-order panel replaced with a weather panel for the selected airfield.
+- METAR from VATSIM, nearest station if the field is silent, Open-Meteo as last resort.
+- Flight category (VFR / MVFR / IFR / LIFR), wind, vis, sky, temp, QNH.
+- Weather later moved under the departure field so the desk is one screen, not a third slab.
+
+PORTABLE PROGRAM
+- Windows 10/11 64-bit TwoFly.exe. Double-click. No installer. No Community folder. No sim hook.
+- Desk process stays running until the window closes (fixes 127.0.0.1 connection refused).
+- Distribution is TwoFly.exe + README only. Pilot marks are inside the program.
+- stamps/ next to the exe still loads if present (sidecar). Stamps zip can be baked in later.
+
+PILOT FILE
+- Local profile: name, airline name, mark, XP, money, hangar, settings.
+- Eight painted marks (1.png–8.png) baked into the exe. Custom upload still available.
+- Pilot block in the top right enlarged (~2.5×): mark, name, optional airline, rank, balance.
+- Checkbox: SHOW AIRLINE ON PILOT FILE. Unchecked hides the airline name on the chip and in briefings.
+
+RANKS
+- Four ranks from XP: 1 PRIVATE (piston) · 2 ROTOR · 3 TURBINE · 4 TRANSPORT (jet).
+- Rank locks on aircraft class, independently switchable in Settings.
+
+MONEY AND BANK
+- Task pay posts to the same local account from Free Flight and Airline (when money is on).
+- Aircraft-tied notes removed.
+- Bank is Farm-Sim style: withdraw / repay against a rank credit cap.
+  Rank 1 $80,000 · Rank 2 $250,000 · Rank 3 $800,000 · Rank 4 $4,000,000.
+
+HANGAR AND MARKET
+- Cash buy / sell (70%).
+- Market lists passenger-service and dedicated cargo types only (1+ pax, or pax 0 with ≥4,000 lb payload).
+- No gliders, no single-seat types.
+- Hangar shows hours and time-to-service.
+
+MAINTENANCE
+- Service due every 40 flight hours on that airframe (simple, Farm-Sim style).
+- Cannot issue taskings on an airframe that is due. Repair in Hangar for a flat shop fee.
+
+MODES
+- FREE FLIGHT: full type list (hangar / all / class / favorite). Task quote shows money only, e.g. $5,000.
+- AIRLINE: own desk (departure, weather, issue, accept, complete, abort). Hangar aircraft that qualify for airline service only. Task quote shows XP and money, e.g. (133xp $5,000).
+- HANGAR: fleet, bank, market.
+- COLLECTION: stamps, postcards, achievements.
+- SETTINGS: XP on/off, money on/off, rank locks on/off.
+
+DESK BEHAVIOR (unchanged contract)
+- Accept / complete / abort. Player marks complete. No sim connection.
+- Brief legs (~30 min) mixed in with longer ones.
+- Stamps and postcards still require a completed tasking plus location rules.
+
+UI
+- Teal-navy field, quieter panels, larger tabs.
+- Removed: airfield count in the header, “hold two seconds” hint, pilots-folder path hint, rank-unlock crib, bank “note” line.
+
+SETTINGS / DATA
+- Progress still localStorage on this machine. Clear log confirms first.
+- Old aircraft notes convert to bank debt on load.
+
+2026-09-17 evening
+- ISSUE FIVE TASKINGS writes only to the current mode board (free flight vs airline). Switching tabs restores that mode's issued list and active sortie.
+- Airline pay line is XP and money without parentheses, e.g. 133xp $5,000.
+- CLEAR on LOGS wipes the sortie log only. CLEAR on COLLECTABLES wipes postmarks, postcards, airfield marks, and encyclopedia pages only. Existing stamps are stored separately and seeded from the current log on first load of this version.
+
+2026-09-18
+- Airline home field: SET HOME from the current departure, HOME returns to it. Also set from Settings.
+- Collectables show percent complete per album and an overall progress line.
+- IBM Plex Sans/Serif/Mono baked into the exe (SIL Open Font License). No Google Fonts request. Offline type matches online.
+- COMPLETE asks for confirmation before pay and collectables post.
+
+2026-09-18 desk pass
+- Click destination ICAO to set it as the next departure.
+- Offered taskings show dest CAT / wind / vis; arrival METAR fills when a card is issued or selected, not only after Accept.
+- Departure and arrival weather stacked in one panel.
+- Issue 1, 3, or 5 taskings.
+- Task cards show time-to-service for the airframe.
+- Collectables albums collapse (states open; others closed). Achievements sit under the book, collapsed.
+- Log rows: FREE/AIRLINE, date as 18 SEP 26, pay and XP.
+- Tab blurbs are one line with a ? for the rest.
+- Abort confirms the same way Complete does.
+- Pilot chip shows XP toward the next rank.
+- Hangar market has the same class filters as Free Flight.
+
+2026-09-18 collectables cut
+- Removed state postmarks and country postmarks, including encyclopedia copy and stamp art.
+- Collectables now: landmarks, city postcards, airport postcards, and airfields flown.
+- Achievements for states and countries removed.
+2026-09-18 bank removed
+- Hangar bank (loan, deposit, repay, withdraw, savings, credit limit) removed.
+- Existing bank deposits fold into the pilot file balance on load. Loans are dropped.
+- Buy, sell, repair, and mission pay still use the pilot balance.

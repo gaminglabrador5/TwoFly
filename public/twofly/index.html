@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TwoFly — Dispatch</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div class="brand">
+        <h1>Two<span>Fly</span></h1>
+        <p>POINT-TO-POINT DISPATCH</p>
+      </div>
+      <div id="pilot-chip" class="pilot-chip"></div>
+    </header>
+
+    <nav class="tabs" id="tabs">
+      <button type="button" data-tab="desk" class="on">FREE FLIGHT</button>
+      <button type="button" data-tab="line">AIRLINE MODE</button>
+      <button type="button" data-tab="hangar">HANGAR</button>
+      <button type="button" data-tab="book">COLLECTABLES</button>
+      <button type="button" data-tab="log">LOGS</button>
+      <button type="button" data-tab="set">SETTINGS</button>
+    </nav>
+
+    <div id="view-desk">
+    <p class="tab-blurb" id="desk-blurb">
+      <span class="blurb-short" id="desk-blurb-short">CIVILIAN TASKINGS. ALL TYPES. PAY POSTS TO THE PILOT FILE.</span>
+      <button type="button" class="blurb-more" aria-label="More" aria-expanded="false">?</button>
+      <span class="blurb-long" hidden id="desk-blurb-long">FREE FLIGHT ISSUES CIVILIAN TASKINGS FROM ANY AIRFIELD. EVERY TYPE ON FILE IS ELIGIBLE. COMPLETED SORTIES POST PAY TO THE PILOT FILE. RANK LOCKS AND HANGAR OWNERSHIP DO NOT APPLY.</span>
+    </p>
+    <div class="grid">
+      <div class="desk-col">
+      <section class="panel">
+        <label for="dep-input">DEPARTURE AIRFIELD</label>
+        <div class="dep-search">
+          <input id="dep-input" type="text" placeholder="ICAO, IATA, NAME, CITY" autocomplete="off" spellcheck="false" />
+          <div id="suggest" hidden></div>
+        </div>
+        <div id="home-row" class="home-row">
+          <button type="button" id="go-home" class="ghost tiny">HOME</button>
+          <button type="button" id="set-home" class="ghost tiny">SET HOME</button>
+          <span id="home-meta" class="muted">NO HOME FIELD SET</span>
+        </div>
+        <div id="dep-card"></div>
+      </section>
+
+      <section class="panel" id="wx">
+        <div class="wx-stack">
+          <div class="wx-slot">
+            <div class="daily-top">
+              <span class="tag">DEPARTURE</span>
+              <span class="muted" id="wx-meta">SELECT AIRFIELD</span>
+            </div>
+            <div id="wx-body"><p class="muted">NO AIRFIELD SELECTED.</p></div>
+          </div>
+          <div class="wx-slot">
+            <div class="daily-top">
+              <span class="tag">ARRIVAL</span>
+              <span class="muted" id="wx-arr-meta">NO DESTINATION</span>
+            </div>
+            <div id="wx-arr-body"><p class="muted">ISSUE OR SELECT A TASKING.</p></div>
+          </div>
+        </div>
+      </section>
+      </div>
+
+      <section class="panel">
+        <label for="ac-search">AIRCRAFT</label>
+        <input id="ac-search" type="text" placeholder="SEARCH TYPE OR MANUFACTURER" autocomplete="off" />
+        <div id="ac-filters" class="filters">
+          <button type="button" data-filter="hangar">HANGAR</button>
+          <button type="button" data-filter="all" class="on">ALL</button>
+          <button type="button" data-filter="piston">PISTON</button>
+          <button type="button" data-filter="turboprop">TURBOPROP</button>
+          <button type="button" data-filter="jet">JET</button>
+          <button type="button" data-filter="helo">ROTOR</button>
+          <button type="button" data-filter="owned">FAVORITE</button>
+        </div>
+        <div id="ac-list" class="ac-list"></div>
+        <div id="ac-meta"></div>
+        <div class="row">
+          <div>
+            <label for="hop">LEG LENGTH</label>
+            <select id="hop">
+              <option value="auto">AUTO — MIXED, PREFER BRIEF</option>
+              <option value="brief">BRIEF 18–55 NM (~30 MIN)</option>
+              <option value="bush">SHORT FIELD 15–90 NM</option>
+              <option value="short">SHORT 70–220 NM</option>
+              <option value="medium">MEDIUM 180–520 NM</option>
+              <option value="long">LONG 450+ NM</option>
+            </select>
+          </div>
+          <div>
+            <label for="type">TASK CATEGORY</label>
+            <select id="type"></select>
+          </div>
+        </div>
+        <label class="check"><input id="hard" type="checkbox" /> PAVED DESTINATION ONLY</label>
+      </section>
+    </div>
+
+    <div class="actions">
+      <div class="issue-n filters" id="issue-n">
+        <button type="button" data-n="1">1</button>
+        <button type="button" data-n="3">3</button>
+        <button type="button" data-n="5" class="on">5</button>
+      </div>
+      <button id="go" type="button">ISSUE 5 TASKINGS</button>
+    </div>
+
+    <section class="panel" id="active"></section>
+
+    <div id="missions"></div>
+    </div>
+
+    <div id="view-book" hidden>
+      <p class="tab-blurb">
+        <span class="blurb-short">UNLOCK POSTMARKS AND POSTCARDS BY COMPLETING SORTIES IN PLACE.</span>
+        <button type="button" class="blurb-more" aria-label="More" aria-expanded="false">?</button>
+        <span class="blurb-long" hidden>COLLECTABLES UNLOCK WHEN A SORTIE IS COMPLETED IN THE REQUIRED PLACE. LANDMARKS REQUIRE A LEG WITHIN 20 NM. CITY POSTCARDS REQUIRE A LEG WITHIN 30 NM. AIRPORT POSTCARDS UNLOCK WHEN THAT FIELD IS USED AS DEPARTURE OR DESTINATION. OPEN AN UNLOCKED ENTRY FOR THE ENCYCLOPEDIA PAGE. CLEAR COLLECTABLES ERASES POSTMARKS ONLY. THE SORTIE LOG IS NOT AFFECTED.</span>
+      </p>
+      <section class="log-panel">
+        <h2>COLLECTABLES
+          <button id="clear-book" class="ghost tiny" type="button">CLEAR</button>
+        </h2>
+        <p id="book-progress" class="album-h"></p>
+        <h3 class="album-h" data-fold="landmarks">LANDMARK POSTMARKS <span id="landmark-count" class="muted"></span> · 20 NM</h3>
+        <div id="landmark-album" class="album" data-fold-body="landmarks"></div>
+        <h3 class="album-h folded" data-fold="cities">CITY POSTCARDS <span id="city-count" class="muted"></span> · 30 NM · 800×600</h3>
+        <div id="city-album" class="album album-card folded" data-fold-body="cities"></div>
+        <h3 class="album-h folded" data-fold="airports">AIRPORT POSTCARDS <span id="airport-count" class="muted"></span> · FIELD USED · 800×600</h3>
+        <div id="airport-album" class="album album-card folded" data-fold-body="airports"></div>
+        <h3 class="album-h folded" data-fold="fields">AIRFIELDS</h3>
+        <div id="stamps" class="stamps folded" data-fold-body="fields"></div>
+      </section>
+      <section class="panel">
+        <button type="button" class="fold-toggle" id="ach-toggle">ACHIEVEMENTS</button>
+        <div id="badges-book" class="badges" hidden></div>
+      </section>
+    </div>
+
+    <div id="view-hangar" hidden>
+      <p class="tab-blurb">
+        <span class="blurb-short">FLEET, CREDIT, AND MARKET FOR AIRLINE MODE. CAP 10.</span>
+        <button type="button" class="blurb-more" aria-label="More" aria-expanded="false">?</button>
+        <span class="blurb-long" hidden>PURCHASE AND SELL AIRCRAFT FOR AIRLINE MODE. FLEET CAPACITY IS 10. TAIL NUMBERS AND MAINTENANCE ARE LOGGED PER AIRFRAME. CREDIT LIMIT RISES WITH CERTIFICATE. WITHDRAW ADDS TO THE PILOT FILE BALANCE. REPAY REDUCES DEBT.</span>
+      </p>
+      <p class="err" id="hangar-err" hidden></p>
+      <section class="panel" id="loan-panel"></section>
+      <section class="panel">
+        <label id="fleet-label">FLEET 0/10</label>
+        <div id="fleet-list" class="fleet"></div>
+      </section>
+      <section class="panel">
+        <label for="mkt-search">AIRCRAFT MARKET</label>
+        <input id="mkt-search" type="text" placeholder="SEARCH TYPE OR MANUFACTURER" autocomplete="off" />
+        <div id="mkt-filters" class="filters">
+          <button type="button" data-mkt="all" class="on">ALL</button>
+          <button type="button" data-mkt="piston">PISTON</button>
+          <button type="button" data-mkt="turboprop">TURBOPROP</button>
+          <button type="button" data-mkt="jet">JET</button>
+          <button type="button" data-mkt="helo">ROTOR</button>
+        </div>
+        <div id="market-list" class="market"></div>
+      </section>
+    </div>
+
+    <div id="view-log" hidden>
+      <p class="tab-blurb">
+        <span class="blurb-short">COMPLETED AND ACCEPTED TASKINGS. CLEAR ERASES THE LOG ONLY.</span>
+        <button type="button" class="blurb-more" aria-label="More" aria-expanded="false">?</button>
+        <span class="blurb-long" hidden>THE SORTIE LOG RECORDS COMPLETED AND ACCEPTED TASKINGS FROM FREE FLIGHT AND AIRLINE MODE. CLEAR ERASES THE LOG ONLY. POSTMARKS AND ENCYCLOPEDIA PAGES ARE NOT AFFECTED.</span>
+      </p>
+      <section class="log-panel">
+        <h2>SORTIE LOG
+          <button id="clear-log" class="ghost tiny" type="button">CLEAR</button>
+        </h2>
+        <div id="pilot-stats" class="pilot-stats"></div>
+        <div id="log"></div>
+      </section>
+    </div>
+
+    <div id="view-set" hidden>
+      <p class="tab-blurb">
+        <span class="blurb-short">OPERATOR, MONEY, RANK LOCKS, CURRENCY, HOME FIELD.</span>
+        <button type="button" class="blurb-more" aria-label="More" aria-expanded="false">?</button>
+        <span class="blurb-long" hidden>OPERATOR IDENTITY IS LOCAL TO THIS INSTALLATION. MONEY AWARDS CONTROL PAY AND MARKET PRICES. RANK LOCKS RESTRICT AIRLINE CLASSES. CURRENCY CONVERTS DISPLAYED PRICES ONLY. AIRLINE HOME FIELD IS THE BASE USED BY THE HOME BUTTON.</span>
+      </p>
+      <section class="panel">
+        <label>OPERATOR</label>
+        <div class="row">
+          <div>
+            <label for="pilot-name">PILOT NAME</label>
+            <input id="pilot-name" type="text" maxlength="32" autocomplete="off" />
+          </div>
+          <div>
+            <label for="airline-name">AIRLINE NAME</label>
+            <input id="airline-name" type="text" maxlength="32" autocomplete="off" />
+            <label class="check"><input id="show-airline" type="checkbox" /> SHOW AIRLINE ON PILOT FILE</label>
+          </div>
+        </div>
+        <label class="pad-top">PILOT PHOTO</label>
+        <div id="icon-picks" class="icon-picks"></div>
+        <label class="file-btn">UPLOAD PHOTO
+          <input id="icon-file" type="file" accept="image/*" />
+        </label>
+      </section>
+      <section class="panel">
+        <label>DISPATCH SETTINGS</label>
+        <label class="check"><input id="set-money" type="checkbox" /> AWARD MONEY</label>
+        <label class="check"><input id="set-locks" type="checkbox" /> ENFORCE RANK LOCKS ON AIRLINE AIRCRAFT</label>
+        <label for="set-ccy" class="pad-top">CURRENCY</label>
+        <select id="set-ccy"></select>
+        <label for="home-input" class="pad-top">AIRLINE HOME FIELD</label>
+        <div class="dep-search">
+          <input id="home-input" type="text" placeholder="ICAO, IATA, NAME, CITY" autocomplete="off" spellcheck="false" />
+          <div id="home-suggest" hidden></div>
+        </div>
+        <p class="muted" id="home-set-meta">USED BY THE HOME BUTTON IN AIRLINE MODE.</p>
+      </section>
+      <section class="panel">
+        <label>ABOUT</label>
+        <p class="muted">TWOFY · MIT LICENSE · 2026</p>
+        <p class="muted">DESIGNED AND DIRECTED BY THE AUTHOR. SOFTWARE IMPLEMENTATION WITH GROK (XAI). FREEWARE. NOT AFFILIATED WITH MICROSOFT OR ASOBO STUDIO.</p>
+      </section>
+    </div>
+  </div>
+
+  <div id="confirm" class="pedia" hidden>
+    <div class="pedia-sheet">
+      <p class="pedia-kicker">CONFIRM</p>
+      <h2 id="confirm-title">CLEAR SORTIE LOG</h2>
+      <p id="confirm-copy">THIS ERASES THE SORTIE LOG ON THIS INSTALLATION. COLLECTABLES ARE NOT AFFECTED. THE ACTIVE SORTIE IS NOT CLEARED.</p>
+      <footer class="job-foot">
+        <button type="button" class="sheet-yes" id="confirm-yes">CLEAR</button>
+        <button type="button" class="sheet-no" id="confirm-no">CANCEL</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="pedia" class="pedia" hidden>
+    <div class="pedia-sheet">
+      <button type="button" class="ghost tiny" id="pedia-close">CLOSE</button>
+      <div id="pedia-body"></div>
+    </div>
+  </div>
+  <script src="airports.js"></script>
+  <script src="aircraft.js"></script>
+  <script src="landmarks.js"></script>
+  <script src="pedia.js"></script>
+  <script src="pedia-meta.js"></script>
+  <script src="pedia-extra.js"></script>
+  <script src="cities.js"></script>
+  <script src="ports.js"></script>
+  <script src="pedia-copy.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
