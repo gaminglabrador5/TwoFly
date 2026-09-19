@@ -9,8 +9,8 @@ No Community folder. No sim connection.
 
 MIT License — free to use, copy, and share. See LICENSE.
 
-Copyright (c) 2026 TwoFly authors
-Designed and directed by the author.
+Copyright (c) 2026 gaminglabrador5
+Designed and directed by gaminglabrador5.
 Software implementation with Grok (xAI).
 
 Use

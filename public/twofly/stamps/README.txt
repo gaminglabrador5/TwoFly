@@ -12,7 +12,7 @@ Drop the file in the matching folder. No code change. Unlock the stamp in the ap
 LANDMARKS  (stamps/landmarks/)
   liberty.png    Statue of Liberty
   empire.png    Empire State Building
-  ellis.png    Ellis Island
+  wtc.png    One World Trade Center
   golden.png    Golden Gate Bridge
   alcatraz.png    Alcatraz
   hollywood.png    Hollywood Sign
@@ -23,7 +23,7 @@ LANDMARKS  (stamps/landmarks/)
   grandcyn.png    Grand Canyon
   delicate.png    Delicate Arch
   shiprock.png    Shiprock
-  totempole.png    Monument Valley Totem Pole
+  monvalley.png    Monument Valley
   yosemite.png    Yosemite El Capitan
   yellowstone.png    Yellowstone Old Faithful
   devilstower.png    Devils Tower

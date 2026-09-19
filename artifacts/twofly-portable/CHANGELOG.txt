@@ -100,7 +100,15 @@ DESK
 --------------------------------------------------------------------------
 18 Sep 2026 — license and pack
 --------------------------------------------------------------------------
-- MIT License. Settings → About: designed by the author, implementation with Grok (xAI).
+- MIT License. Settings → About: designed by gaminglabrador5, implementation with Grok (xAI).
+- Tab blurbs are ? only until opened. Taskings show airport name under ICAO. Settings: CLEAR ALL PROGRESS.
 - Not affiliated with Microsoft, Asobo, or any payware studio.
 - Airfield data: OurAirports (public domain).
 - Player pack is TwoFly.exe + README.txt + LICENSE + this changelog.
+
+--------------------------------------------------------------------------
+18 Sep 2026 — landmarks
+--------------------------------------------------------------------------
+- Ellis Island replaced by One World Trade Center (id wtc).
+- Monument Valley Totem Pole replaced by Monument Valley (id monvalley).
+- Existing unlocks for those ids migrate on load.

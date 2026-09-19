@@ -4,7 +4,7 @@ Freeware point-to-point dispatch generator for Microsoft Flight Simulator 2024. 
 
 **MIT License.** Free to use, copy, modify, and share. See [LICENSE](LICENSE) and [NOTICE.txt](NOTICE.txt).
 
-Designed and directed by the author. Software implementation with Grok (xAI).
+Designed and directed by gaminglabrador5. Software implementation with Grok (xAI).
 
 Not affiliated with Microsoft, Asobo Studio, or any aircraft or scenery publisher.
 

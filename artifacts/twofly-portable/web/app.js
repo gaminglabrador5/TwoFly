@@ -122,7 +122,18 @@
     };
   }
   function loadPedia() {
-    try { return JSON.parse(localStorage.getItem("twofly-pedia") || "{}"); }
+    try {
+      const raw = JSON.parse(localStorage.getItem("twofly-pedia") || "{}");
+      if (raw && raw["lm:ellis"] && !raw["lm:wtc"]) {
+        raw["lm:wtc"] = raw["lm:ellis"];
+        delete raw["lm:ellis"];
+      }
+      if (raw && raw["lm:totempole"] && !raw["lm:monvalley"]) {
+        raw["lm:monvalley"] = raw["lm:totempole"];
+        delete raw["lm:totempole"];
+      }
+      return raw && typeof raw === "object" ? raw : {};
+    }
     catch { return {}; }
   }
   function savePedia() {
@@ -176,7 +187,7 @@
           stamps: raw.stamps || [],
           states: raw.states || [],
           countries: raw.countries || [],
-          marks: raw.marks || [],
+          marks: (raw.marks || []).map((id) => (id === "ellis" ? "wtc" : id === "totempole" ? "monvalley" : id)),
           cities: raw.cities || [],
           ports: raw.ports || [],
         };
@@ -233,6 +244,11 @@
     });
     saveCollection();
   }
+  function fieldCaption(a) {
+    if (!a) return "";
+    return a.n || a.c || "";
+  }
+
   function payText(m, active) {
     const airline = (m && m.mode === "airline") || state.mode === "airline";
     if (airline) return `${m.xp || xpFor(m)}xp ${moneyFmt(m.money)}`;
@@ -804,8 +820,8 @@
   function missionText(m) {
     const t = TYPES.find((x) => x.id === m.type);
     return [
-      `TWOFY DISPATCH`,
-      `${(t && t.label) || m.type}  ·  ${m.dep.id} → ${m.dest.id}  ·  ${m.dist} nm  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
+      `TWOFLY DISPATCH`,
+      `${(t && t.label) || m.type}  ·  ${m.dep.id} ${fieldCaption(m.dep)} → ${m.dest.id} ${fieldCaption(m.dest)}  ·  ${m.dist} nm  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
       `Aircraft: ${m.acName}${m.acTail ? "  " + m.acTail : ""}`,
       `Payload: ${m.pay.text}`,
       `Suggested: ${m.alt.toLocaleString()} ft · ETE ~${fmtEte(m.eteMin)}`,
@@ -1255,6 +1271,10 @@
       if (title) title.textContent = "ABORT SORTIE";
       if (copy) copy.textContent = "RELEASE THIS TASKING. PAY AND COLLECTABLES WILL NOT POST.";
       if (yes) yes.textContent = "ABORT";
+    } else if (kind === "all") {
+      if (title) title.textContent = "CLEAR ALL PROGRESS";
+      if (copy) copy.textContent = "THIS ERASES THE PILOT FILE, HANGAR, MONEY, XP, SORTIE LOG, COLLECTABLES, AND ACTIVE TASKINGS ON THIS INSTALLATION. THIS CANNOT BE UNDONE.";
+      if (yes) yes.textContent = "CLEAR ALL";
     } else {
       if (title) title.textContent = "CLEAR SORTIE LOG";
       if (copy) copy.textContent = "THIS ERASES THE SORTIE LOG ON THIS INSTALLATION. COLLECTABLES ARE NOT AFFECTED. THE ACTIVE SORTIE IS NOT CLEARED.";
@@ -1468,9 +1488,9 @@
           <span class="pay">${payText(m, true)}</span>
         </header>
         <div class="route">
-          <div><b>${m.dep.id}</b><span>${m.dep.c || m.dep.n}</span></div>
+          <div><b>${m.dep.id}</b><span>${fieldCaption(m.dep)}</span></div>
           <div class="arrow">→</div>
-          <div><b>${icaoJump(m.dest)}</b><span>${m.dest.c || m.dest.n}</span></div>
+          <div><b>${icaoJump(m.dest)}</b><span>${fieldCaption(m.dest)}</span></div>
         </div>
         <div class="stats">
           <span>${m.dist} nm</span>
@@ -1632,9 +1652,9 @@
             <span class="pay">${payText(m, false)}</span>
           </header>
           <div class="route">
-            <div><b>${m.dep.id}</b><span>${m.dep.c || m.dep.n}</span></div>
+            <div><b>${m.dep.id}</b><span>${fieldCaption(m.dep)}</span></div>
             <div class="arrow">→</div>
-            <div><b>${icaoJump(m.dest)}</b><span>${m.dest.c || m.dest.n}</span></div>
+            <div><b>${icaoJump(m.dest)}</b><span>${fieldCaption(m.dest)}</span></div>
           </div>
           <div class="stats">
             <span>${m.dist} nm</span>
@@ -1691,13 +1711,10 @@
         ? `<button type="button" class="icon-pick on custom" data-icon="custom"><img alt="" src="${p.iconData}" /></button>`
         : "");
     }
-    const blurbShort = $("#desk-blurb-short");
     const blurbLong = $("#desk-blurb-long");
     if (state.mode === "airline") {
-      if (blurbShort) blurbShort.textContent = "HANGAR AIRCRAFT ONLY. PAY AND XP POST. HOME SETS BASE.";
       if (blurbLong) blurbLong.textContent = "AIRLINE MODE ISSUES REVENUE TASKINGS USING AIRCRAFT ON THE HANGAR LINE ONLY. PAY AND XP POST TO THE PILOT FILE. RANK LOCKS AND MAINTENANCE APPLY WHEN ENABLED. HOME SETS THE AIRLINE BASE. PURCHASE TYPES FROM THE HANGAR TAB.";
     } else {
-      if (blurbShort) blurbShort.textContent = "CIVILIAN TASKINGS. ALL TYPES. PAY POSTS TO THE PILOT FILE.";
       if (blurbLong) blurbLong.textContent = "FREE FLIGHT ISSUES CIVILIAN TASKINGS FROM ANY AIRFIELD. EVERY TYPE ON FILE IS ELIGIBLE. COMPLETED SORTIES POST PAY TO THE PILOT FILE. RANK LOCKS AND HANGAR OWNERSHIP DO NOT APPLY.";
     }
     renderHome();
@@ -1913,6 +1930,7 @@
         <div class="log-row">
           <div>
             <b>${m.dep.id} → ${m.dest.id}</b>
+            <span>${fieldCaption(m.dep)} → ${fieldCaption(m.dest)}</span>
             <span>${mode}${when ? " · " + when : ""} · ${TYPES.find((t) => t.id === m.type)?.label || m.type} · ${m.dist} nm · ${m.acName}${m.flown ? " · flown" : ""} · ${pay}</span>
           </div>
           <button class="ghost tiny copy-log" data-id="${m.id}">copy</button>
@@ -2208,6 +2226,7 @@
 
     $("#clear-log").addEventListener("click", () => openConfirm("log"));
     $("#clear-book")?.addEventListener("click", () => openConfirm("book"));
+    $("#clear-all")?.addEventListener("click", () => openConfirm("all"));
     $("#confirm-no").addEventListener("click", () => {
       state.pendingClear = "";
       $("#confirm").hidden = true;
@@ -2231,6 +2250,8 @@
         state.log = [];
         saveLog();
         renderLog();
+      } else if (kind === "all") {
+        resetAllProgress();
       }
     });
     $("#confirm").addEventListener("click", (e) => {
@@ -2536,6 +2557,35 @@
     useBoard(state.mode);
     state.owned = loadOwned();
     state.profile = loadProfile();
+  }
+
+  function resetAllProgress() {
+    STORE_KEYS.forEach((k) => localStorage.removeItem(k));
+    state.profile = defaultProfile();
+    state.log = [];
+    state.collection = emptyCollection();
+    state.pedia = {};
+    state.owned = new Set();
+    state.missionsBy = { free: [], airline: [] };
+    state.activeBy = { free: null, airline: null };
+    useBoard(state.mode);
+    saveProfile();
+    saveLog();
+    saveCollection();
+    savePedia();
+    saveOwned();
+    saveActive();
+    renderPilotChip();
+    renderHangar();
+    renderLog();
+    renderBook();
+    renderAircraft();
+    renderAcMeta();
+    renderAirline();
+    renderMissions();
+    renderActive();
+    renderSettings();
+    renderRank();
   }
 
   async function hydrateStore() {

@@ -2,7 +2,7 @@
 window.TWOFY_LANDMARKS = [
   {id:"liberty",n:"Statue of Liberty",lat:40.6892,lon:-74.0445,cc:"US"},
   {id:"empire",n:"Empire State Building",lat:40.7484,lon:-73.9857,cc:"US"},
-  {id:"ellis",n:"Ellis Island",lat:40.6995,lon:-74.0396,cc:"US"},
+  {id:"wtc",n:"One World Trade Center",lat:40.7127,lon:-74.0134,cc:"US"},
   {id:"golden",n:"Golden Gate Bridge",lat:37.8199,lon:-122.4783,cc:"US"},
   {id:"alcatraz",n:"Alcatraz",lat:37.8270,lon:-122.4230,cc:"US"},
   {id:"hollywood",n:"Hollywood Sign",lat:34.1341,lon:-118.3215,cc:"US"},
@@ -13,7 +13,7 @@ window.TWOFY_LANDMARKS = [
   {id:"grandcyn",n:"Grand Canyon",lat:36.1069,lon:-112.1129,cc:"US"},
   {id:"delicate",n:"Delicate Arch",lat:38.7436,lon:-109.4993,cc:"US"},
   {id:"shiprock",n:"Shiprock",lat:36.6876,lon:-108.8363,cc:"US"},
-  {id:"totempole",n:"Monument Valley Totem Pole",lat:36.9320,lon:-110.0840,cc:"US"},
+  {id:"monvalley",n:"Monument Valley",lat:36.9603,lon:-110.0985,cc:"US"},
   {id:"yosemite",n:"Yosemite El Capitan",lat:37.7340,lon:-119.6370,cc:"US"},
   {id:"yellowstone",n:"Yellowstone Old Faithful",lat:44.4605,lon:-110.8280,cc:"US"},
   {id:"devilstower",n:"Devils Tower",lat:44.5906,lon:-104.7150,cc:"US"},

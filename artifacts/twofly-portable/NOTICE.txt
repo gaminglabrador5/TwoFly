@@ -1,10 +1,10 @@
 TwoFly
-Copyright (c) 2026 TwoFly authors
+Copyright (c) 2026 gaminglabrador5
 Released under the MIT License. See LICENSE.
 
 Credits
 -------
-Designed and directed by the author.
+Designed and directed by gaminglabrador5.
 Software implementation with Grok (xAI).
 
 The work is free. Keep this notice and the MIT license with copies
