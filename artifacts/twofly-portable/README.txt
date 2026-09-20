@@ -14,6 +14,8 @@ Installation
 
 No installer. No Community folder. No simulator connection.
 Windows 10 / 11, 64-bit.
+Uses the Microsoft Edge WebView2 Runtime (already on most Windows 10/11 PCs).
+If TwoFly asks for it: https://go.microsoft.com/fwlink/p/?LinkId=2124703
 
 Use
 ---
@@ -34,9 +36,8 @@ does not erase the pilot file.
 Settings → Export Backup saves a .json copy you can keep off-machine.
 Import Backup restores it.
 
-If the pilot chip is missing and nothing clicks, close TwoFly, then
-delete the folder %LOCALAPPDATA%\TwoFly\edge-145 and run TwoFly.exe
-again.
+If the window is blank, close TwoFly, then delete the folder
+%LOCALAPPDATA%\TwoFly\wv2 and run TwoFly.exe again.
 
 Optional art next to TwoFly.exe
 -------------------------------
@@ -56,4 +57,4 @@ Airfield data: OurAirports (public domain).
 IBM Plex fonts: SIL Open Font License 1.1.
 Not affiliated with Microsoft, Asobo, or any payware studio.
 
-TwoFly v1.4.6
+TwoFly v1.5.0

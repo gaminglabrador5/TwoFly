@@ -1,6 +1,6 @@
 /* TwoFly — simple MSFS mission generator */
 (function () {
-  const VERSION = "1.4.6";
+  const VERSION = "1.5.0";
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
   function esc(s) {
@@ -1860,13 +1860,10 @@
         : "");
     }
     const blurbLong = $("#desk-blurb-long");
-    const modeLine = $("#mode-line");
     if (state.mode === "airline") {
       if (blurbLong) blurbLong.textContent = "AIRLINE MODE generates revenue taskings using only aircraft currently in your hangar. Completing a tasking adds both pay and XP to your pilot file. Rank restrictions and maintenance apply when enabled. Use HOME to set your airline base, and purchase aircraft types from the HANGAR tab.";
-      if (modeLine) modeLine.textContent = "AIRLINE MODE — hangar fleet. Pay and XP. Certificates.";
     } else {
       if (blurbLong) blurbLong.textContent = "FREE FLIGHT lets you take civilian taskings from any airfield. Every aircraft type in your files is eligible. Completing a sortie adds the payment to your pilot file. Rank restrictions and hangar ownership do not apply.";
-      if (modeLine) modeLine.textContent = "FREE FLIGHT — fly any type. Pay only.";
     }
     renderHome();
   }
@@ -2462,17 +2459,6 @@
         renderActive();
       }
       document.body.classList.toggle("mode-airline", state.mode === "airline");
-      const modeLine = $("#mode-line");
-      if (modeLine) {
-        if (tab === "desk" || tab === "line") {
-          modeLine.hidden = false;
-          modeLine.textContent = tab === "line"
-            ? "AIRLINE MODE — hangar fleet. Pay and XP. Certificates."
-            : "FREE FLIGHT — fly any type. Pay only.";
-        } else {
-          modeLine.hidden = true;
-        }
-      }
       $$("#tabs button").forEach((b) => b.classList.toggle("on", b === btn));
       const deskOn = tab === "desk" || tab === "line";
       $("#view-desk").hidden = !deskOn;
@@ -2691,8 +2677,6 @@
         `<option value="any">ANY AUTHORIZED CATEGORY</option>` +
         TYPES.map((t) => `<option value="${t.id}">${t.label}</option>`).join("");
     }
-    const ver = $(".about-ver");
-    if (ver) ver.textContent = "v" + VERSION;
     stampBuild();
 
     const run = (fn) => { try { fn(); } catch (e) { console.error(e); } };
@@ -2814,21 +2798,17 @@
   }
 
   function stampBuild() {
-    const el = $("#build-id");
     const about = $(".about-ver");
-    const paint = (exe, build, addr) => {
-      const line = exe
-        ? `EXE ${exe} · ${build || "?"} · ${addr || ""}`
-        : `JS v${VERSION} · no exe stamp`;
-      if (el) el.textContent = line;
-      if (about) about.textContent = exe ? `v${VERSION} · EXE ${exe} ${build || ""}` : "v" + VERSION;
+    const paint = (exe, build) => {
+      const line = exe ? `EXE ${exe} · ${build || ""}`.trim() : `JS v${VERSION}`;
+      if (about) about.textContent = line;
       document.title = exe ? `TwoFly ${exe}` : `TwoFly v${VERSION}`;
     };
     fetch("/__twofly/version", { cache: "no-store" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
         if (!d || !d.version) return;
-        paint(d.version, d.build, d.addr);
+        paint(d.version, d.build);
       })
       .catch(() => {});
   }

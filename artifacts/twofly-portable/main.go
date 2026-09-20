@@ -9,20 +9,20 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 	"unsafe"
+
+	webview2 "github.com/jchv/go-webview2"
 )
 
 //go:embed all:web
 var webFS embed.FS
 
-const appVersion = "1.4.6"
-const appBuild = "20260919e"
+const appVersion = "1.5.0"
+const appBuild = "20260919g"
 
 func dataDir() string {
 	base := os.Getenv("LOCALAPPDATA")
@@ -78,48 +78,6 @@ func sidecarDir(name string) string {
 	}
 	logf("sidecar %s: %s", name, dir)
 	return dir
-}
-
-func browserCandidates() []string {
-	pf := os.Getenv("ProgramFiles")
-	pfx := os.Getenv("ProgramFiles(x86)")
-	local := os.Getenv("LOCALAPPDATA")
-	return []string{
-		filepath.Join(pfx, `Microsoft\Edge\Application\msedge.exe`),
-		filepath.Join(pf, `Microsoft\Edge\Application\msedge.exe`),
-		filepath.Join(pf, `Google\Chrome\Application\chrome.exe`),
-		filepath.Join(local, `Google\Chrome\Application\chrome.exe`),
-		filepath.Join(local, `Microsoft\Edge\Application\msedge.exe`),
-	}
-}
-
-func openDesk(url string) error {
-	profile := filepath.Join(os.Getenv("LOCALAPPDATA"), "TwoFly", "edge-145")
-	_ = os.MkdirAll(profile, 0755)
-	args := []string{
-		"--app=" + url,
-		"--user-data-dir=" + profile,
-		"--no-first-run",
-		"--no-default-browser-check",
-		"--disable-http-cache",
-		"--disable-features=Translate",
-	}
-	for _, bin := range browserCandidates() {
-		if _, err := os.Stat(bin); err != nil {
-			continue
-		}
-		logf("launch %s", bin)
-		cmd := exec.Command(bin, args...)
-		cmd.Dir = profile
-		if err := cmd.Start(); err != nil {
-			logf("start failed: %v", err)
-			continue
-		}
-		go func() { _ = cmd.Wait() }()
-		return nil
-	}
-	logf("no chrome/edge found, using default handler")
-	return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 }
 
 func sidecarHandler(disks map[string]string, embedRoot fs.FS) http.Handler {
@@ -198,6 +156,34 @@ func waitReady(url string) bool {
 	return false
 }
 
+func openWindow(url string) {
+	wvDir := filepath.Join(dataDir(), "wv2")
+	_ = os.MkdirAll(wvDir, 0755)
+	w := webview2.NewWithOptions(webview2.WebViewOptions{
+		Debug:     false,
+		DataPath:  wvDir,
+		AutoFocus: true,
+		WindowOptions: webview2.WindowOptions{
+			Title:  "TwoFly",
+			Width:  1280,
+			Height: 840,
+			IconId: 1,
+			Center: true,
+		},
+	})
+	if w == nil {
+		logf("webview2 failed to create window")
+		alert("TwoFly", "Microsoft WebView2 Runtime is required.\nInstall it from Microsoft, then run TwoFly again.\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703")
+		return
+	}
+	defer w.Destroy()
+	w.SetSize(960, 640, webview2.HintMin)
+	w.SetSize(1280, 840, webview2.HintNone)
+	w.Navigate(url)
+	logf("webview2 %s", url)
+	w.Run()
+}
+
 func main() {
 	root, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -226,10 +212,8 @@ func main() {
 	url := "http://" + addr + "/"
 	logf("serve %s", url)
 
-	var lastPing atomic.Int64
 	mux := http.NewServeMux()
 	mux.HandleFunc("/__twofly/ping", func(w http.ResponseWriter, r *http.Request) {
-		lastPing.Store(time.Now().Unix())
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(204)
@@ -292,28 +276,5 @@ func main() {
 		alert("TwoFly", "Local desk did not start.")
 		return
 	}
-	if err := openDesk(url); err != nil {
-		logf("open: %v", err)
-		alert("TwoFly", "Install Microsoft Edge or Google Chrome, then try again.")
-		return
-	}
-
-	// Stay alive until the window stops pinging. Edge/Chrome often exits the
-	// launcher process immediately; do not treat that as "window closed".
-	firstDeadline := time.Now().Add(60 * time.Second)
-	for {
-		time.Sleep(1 * time.Second)
-		ping := lastPing.Load()
-		if ping == 0 {
-			if time.Now().After(firstDeadline) {
-				logf("no window ping")
-				return
-			}
-			continue
-		}
-		if time.Now().Unix()-ping > 12 {
-			logf("window gone")
-			return
-		}
-	}
+	openWindow(url)
 }

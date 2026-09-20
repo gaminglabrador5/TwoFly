@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TwoFly — Dispatch</title>
-  <link rel="stylesheet" href="style.css?v=1.4.6" />
+  <link rel="stylesheet" href="style.css?v=1.5.0" />
 </head>
 <body>
   <div class="wrap">
@@ -13,7 +13,6 @@
         <h1 class="logo">Two<span>Fly</span></h1>
         <p class="motto">TIME TO FLY</p>
         <p class="tiny" id="field-count"></p>
-        <p class="tiny" id="build-id">waiting for desk…</p>
       </div>
       <div id="pilot-chip" class="pilot-chip"></div>
     </header>
@@ -26,7 +25,6 @@
       <button type="button" data-tab="log">LOGS</button>
       <button type="button" data-tab="set">SETTINGS</button>
     </nav>
-    <p id="mode-line" class="mode-line">FREE FLIGHT — fly any type. Pay only.</p>
 
     <div id="view-desk">
     <p class="tab-blurb" id="desk-blurb">
@@ -250,9 +248,9 @@
       </section>
       <section class="panel about-panel">
         <label>ABOUT</label>
-        <p class="muted">TWOFLY · MIT LICENSE · 2026</p>
-        <p class="muted">DESIGNED AND DIRECTED BY GAMINGLABRADOR5. SOFTWARE IMPLEMENTATION WITH GROK (XAI). FREEWARE. NOT AFFILIATED WITH MICROSOFT OR ASOBO STUDIO.</p>
-        <p class="about-ver">v1.4.6</p>
+        <p>TWOFLY · MIT LICENSE · 2026</p>
+        <p>A project designed and directed by gaminglabrador5, with software development assistance from Grok (xAI). Released as freeware. TwoFly is an independent project and is not affiliated with Microsoft or Asobo Studio.</p>
+        <p class="about-ver" id="about-ver">EXE 1.5.0</p>
       </section>
     </div>
   </div>
@@ -285,8 +283,6 @@
         <li>Issue a tasking. Fly it in the simulator.</li>
         <li>Return here and press COMPLETE.</li>
       </ol>
-      <p>FREE FLIGHT — fly any type. Pay only.</p>
-      <p>AIRLINE MODE — hangar fleet. Pay and XP. Certificates.</p>
       <p class="muted">No connection to the simulator. You mark the sortie yourself.</p>
       <footer class="job-foot">
         <button type="button" class="sheet-yes" id="welcome-go">BEGIN</button>
@@ -296,15 +292,15 @@
   <!-- Airfields load as airports.json from app.js. Do not add airports.js as a blocking script. -->
   <script>
     (function () {
-      var el = document.getElementById("build-id");
+      var el = document.getElementById("about-ver");
       fetch("/__twofly/version", { cache: "no-store" })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
           if (!el) return;
-          if (d && d.version) el.textContent = "EXE " + d.version + " · " + (d.build || "") + " · " + (d.addr || "");
-          else el.textContent = "JS only · no exe stamp";
+          if (d && d.version) el.textContent = "EXE " + d.version + " · " + (d.build || "");
+          else el.textContent = "JS v1.5.0";
         })
-        .catch(function () { if (el) el.textContent = "JS only · no exe stamp"; });
+        .catch(function () { if (el) el.textContent = "JS v1.5.0"; });
       setTimeout(function () {
         var chip = document.getElementById("pilot-chip");
         if (chip && !String(chip.innerHTML || "").trim()) {
@@ -313,11 +309,11 @@
       }, 4000);
     })();
   </script>
-  <script src="aircraft.js?v=1.4.6"></script>
-  <script src="landmarks.js?v=1.4.6"></script>
-  <script src="cities.js?v=1.4.6"></script>
-  <script src="ports.js?v=1.4.6"></script>
-  <script src="pedia-copy.js?v=1.4.6"></script>
-  <script src="app.js?v=1.4.6"></script>
+  <script src="aircraft.js?v=1.5.0"></script>
+  <script src="landmarks.js?v=1.5.0"></script>
+  <script src="cities.js?v=1.5.0"></script>
+  <script src="ports.js?v=1.5.0"></script>
+  <script src="pedia-copy.js?v=1.5.0"></script>
+  <script src="app.js?v=1.5.0"></script>
 </body>
 </html>

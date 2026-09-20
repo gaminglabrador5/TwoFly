@@ -5,6 +5,21 @@ Pack: TwoFly.exe + README.txt + LICENSE + CHANGELOG.txt
 Windows 10/11 64-bit. Double-click. No installer. No Community folder. No sim connection.
 
 --------------------------------------------------------------------------
+19 Sep 2026 — v1.5.0 WebView2
+--------------------------------------------------------------------------
+- TwoFly owns the window. Title TwoFly. Close quits the program.
+- Microsoft WebView2 instead of launching Edge or Chrome.
+- No Edge --app profile. WebView2 data lives in %LOCALAPPDATA%\TwoFly\wv2.
+- Same portable zip: extract, run TwoFly.exe.
+
+--------------------------------------------------------------------------
+19 Sep 2026 — v1.4.7 about
+--------------------------------------------------------------------------
+- About credits: designed and directed by gaminglabrador5, with software development assistance from Grok (xAI). Freeware. Not affiliated with Microsoft or Asobo Studio.
+- EXE stamp lives in About (version · build). Port is not shown.
+- Removed the FREE FLIGHT / AIRLINE MODE one-liners under the tabs and on welcome.
+
+--------------------------------------------------------------------------
 19 Sep 2026 — v1.4.6 desk boot lock
 --------------------------------------------------------------------------
 - EXE stamp under the logo (version, build, port) so a stale Edge window cannot hide.
