@@ -4,25 +4,39 @@ TwoFly
 Freeware dispatch desk for Microsoft Flight Simulator 2024.
 Also usable as a planning sheet for other sims.
 
-Windows 10 / 11, 64-bit. Double-click TwoFly.exe. No install.
-No Community folder. No sim connection.
+Installation
+------------
+1. Download TwoFly.
+2. Extract the ZIP.
+3. Run TwoFly.exe.
+4. Create your pilot.
+5. Fly.
 
-MIT License — free to use, copy, and share. See LICENSE.
-
-Copyright (c) 2026 gaminglabrador5
-Designed and directed by gaminglabrador5.
-Software implementation with Grok (xAI).
+No installer. No Community folder. No simulator connection.
+Windows 10 / 11, 64-bit.
 
 Use
 ---
+FREE FLIGHT — fly any type. Pay only.
+AIRLINE MODE — hangar fleet. Pay and XP. Certificates
+(Student Pilot → Private Pilot → Commercial Pilot → ATP).
+
 1. Pick departure and aircraft.
 2. Issue taskings (1 / 3 / 5).
 3. Accept, fly in the sim, then Complete or Abort.
-4. Airline mode uses the hangar fleet, pay, XP, and certificates
-   (Student Pilot → Private Pilot → Commercial Pilot → ATP).
 
+Progress
+--------
 Pilot name, photo, hangar, money, XP, log, and collectables save on
-this machine and return when you reopen the exe.
+this machine (Windows: %LOCALAPPDATA%\TwoFly). Replacing TwoFly.exe
+does not erase the pilot file.
+
+Settings → Export Backup saves a .json copy you can keep off-machine.
+Import Backup restores it.
+
+If the pilot chip is missing and nothing clicks, close TwoFly, then
+delete the folder %LOCALAPPDATA%\TwoFly\edge-145 and run TwoFly.exe
+again.
 
 Optional art next to TwoFly.exe
 -------------------------------
@@ -33,6 +47,13 @@ Optional art next to TwoFly.exe
 
 JPEG first; PNG is accepted as a fallback.
 
+MIT License — free to use, copy, and share. See LICENSE.
+Copyright (c) 2026 gaminglabrador5
+Designed and directed by gaminglabrador5.
+Software implementation with Grok (xAI).
+
 Airfield data: OurAirports (public domain).
 IBM Plex fonts: SIL Open Font License 1.1.
 Not affiliated with Microsoft, Asobo, or any payware studio.
+
+TwoFly v1.4.6

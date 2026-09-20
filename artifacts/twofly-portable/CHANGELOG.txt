@@ -5,6 +5,16 @@ Pack: TwoFly.exe + README.txt + LICENSE + CHANGELOG.txt
 Windows 10/11 64-bit. Double-click. No installer. No Community folder. No sim connection.
 
 --------------------------------------------------------------------------
+19 Sep 2026 — v1.4.6 desk boot lock
+--------------------------------------------------------------------------
+- EXE stamp under the logo (version, build, port) so a stale Edge window cannot hide.
+- Airfields load from airports.json after the desk starts. Never a blocking airports.js.
+- Init no longer waits on saved-store hydrate.
+- Bad log/active rows without dep/dest cannot blank the chip.
+- If the desk script never starts, the chip says so after 4 seconds.
+- Port range 17824–17834. Cache-Control no-store.
+
+--------------------------------------------------------------------------
 15–16 Sep 2026
 --------------------------------------------------------------------------
 

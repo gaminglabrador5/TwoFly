@@ -4,14 +4,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TwoFly — Dispatch</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=1.4.6" />
 </head>
 <body>
   <div class="wrap">
     <header class="top">
       <div class="brand">
-        <h1>Two<span>Fly</span></h1>
-        <p>POINT-TO-POINT DISPATCH</p>
+        <h1 class="logo">Two<span>Fly</span></h1>
+        <p class="motto">TIME TO FLY</p>
+        <p class="tiny" id="field-count"></p>
+        <p class="tiny" id="build-id">waiting for desk…</p>
       </div>
       <div id="pilot-chip" class="pilot-chip"></div>
     </header>
@@ -24,11 +26,12 @@
       <button type="button" data-tab="log">LOGS</button>
       <button type="button" data-tab="set">SETTINGS</button>
     </nav>
+    <p id="mode-line" class="mode-line">FREE FLIGHT — fly any type. Pay only.</p>
 
     <div id="view-desk">
     <p class="tab-blurb" id="desk-blurb">
       <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-      <span class="blurb-long" hidden id="desk-blurb-long">FREE FLIGHT ISSUES CIVILIAN TASKINGS FROM ANY AIRFIELD. EVERY TYPE ON FILE IS ELIGIBLE. COMPLETED SORTIES POST PAY TO THE PILOT FILE. RANK LOCKS AND HANGAR OWNERSHIP DO NOT APPLY.</span>
+      <span class="blurb-long" hidden id="desk-blurb-long">FREE FLIGHT lets you take civilian taskings from any airfield. Every aircraft type in your files is eligible. Completing a sortie adds the payment to your pilot file. Rank restrictions and hangar ownership do not apply.</span>
     </p>
     <div class="grid">
       <div class="desk-col">
@@ -78,7 +81,19 @@
           <button type="button" data-filter="helo">ROTOR</button>
           <button type="button" data-filter="owned">FAVORITE</button>
         </div>
-        <div id="ac-list" class="ac-list"></div>
+        <div class="row ac-pick">
+          <div>
+            <label for="ac-maker">MANUFACTURER</label>
+            <select id="ac-maker"></select>
+          </div>
+          <div>
+            <label for="ac-select">TYPE</label>
+            <div class="ac-type-row">
+              <select id="ac-select"></select>
+              <button type="button" id="ac-fav" class="ac-fav" title="FAVORITE">★</button>
+            </div>
+          </div>
+        </div>
         <div id="ac-meta"></div>
         <div class="row">
           <div>
@@ -118,7 +133,7 @@
     <div id="view-book" hidden>
       <p class="tab-blurb">
         <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-        <span class="blurb-long" hidden>COLLECTABLES UNLOCK WHEN A SORTIE IS COMPLETED IN THE REQUIRED PLACE. LANDMARKS REQUIRE A LEG WITHIN 20 NM. CITY POSTCARDS REQUIRE A LEG WITHIN 30 NM. AIRPORT POSTCARDS UNLOCK WHEN THAT FIELD IS USED AS DEPARTURE OR DESTINATION. OPEN AN UNLOCKED ENTRY FOR THE ENCYCLOPEDIA PAGE. CLEAR COLLECTABLES ERASES POSTMARKS ONLY. THE SORTIE LOG IS NOT AFFECTED.</span>
+        <span class="blurb-long" hidden>Collectables unlock when you complete a sortie in the required area. Landmarks require a leg within 20 NM, while city postcards require a leg within 30 NM. Airport postcards unlock when you use that airport as either your departure or destination. Open any unlocked entry to view its encyclopedia page. Clearing your collectables only removes the postmarks and does not affect your sortie log.</span>
       </p>
       <section class="log-panel">
         <h2>COLLECTABLES
@@ -143,7 +158,7 @@
     <div id="view-hangar" hidden>
       <p class="tab-blurb">
         <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-        <span class="blurb-long" hidden>PURCHASE AND SELL AIRCRAFT FOR AIRLINE MODE. FLEET CAPACITY IS 10. TAIL NUMBERS AND MAINTENANCE ARE LOGGED PER AIRFRAME. CREDIT LIMIT RISES WITH CERTIFICATE. WITHDRAW ADDS TO THE PILOT FILE BALANCE. REPAY REDUCES DEBT.</span>
+        <span class="blurb-long" hidden>Buy and sell aircraft for AIRLINE MODE. Your fleet can hold up to 10 aircraft. Tail numbers and maintenance are tracked separately for each airframe. Your credit limit increases as you earn certificates. Withdrawals are added to your pilot file balance, while repayments reduce your debt.</span>
       </p>
       <p class="err" id="hangar-err" hidden></p>
       <section class="panel" id="loan-panel"></section>
@@ -168,7 +183,7 @@
     <div id="view-log" hidden>
       <p class="tab-blurb">
         <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-        <span class="blurb-long" hidden>THE SORTIE LOG RECORDS COMPLETED AND ACCEPTED TASKINGS FROM FREE FLIGHT AND AIRLINE MODE. CLEAR ERASES THE LOG ONLY. POSTMARKS AND ENCYCLOPEDIA PAGES ARE NOT AFFECTED.</span>
+        <span class="blurb-long" hidden>The SORTIE LOG records completed and accepted taskings from both FREE FLIGHT and AIRLINE MODE. Clearing the log only removes its entries. Your postmarks and encyclopedia pages are not affected.</span>
       </p>
       <section class="log-panel">
         <h2>SORTIE LOG
@@ -182,7 +197,7 @@
     <div id="view-set" hidden>
       <p class="tab-blurb">
         <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-        <span class="blurb-long" hidden>OPERATOR IDENTITY IS LOCAL TO THIS INSTALLATION. MONEY AWARDS CONTROL PAY AND MARKET PRICES. RANK LOCKS RESTRICT AIRLINE CLASSES. CURRENCY CONVERTS DISPLAYED PRICES ONLY. AIRLINE HOME FIELD IS THE BASE USED BY THE HOME BUTTON. CLEAR ALL PROGRESS ERASES THE PILOT FILE, HANGAR, LOG, AND COLLECTABLES.</span>
+        <span class="blurb-long" hidden>OPERATOR IDENTITY is tied to this application. Money awards determine your pay and market prices, while rank restrictions determine which airline classes you can access. Currency conversion only changes the prices displayed in the application. Your AIRLINE HOME FIELD is the base used by the HOME button. CLEAR ALL PROGRESS permanently erases your pilot file, hangar, sortie log, and collectables.</span>
       </p>
       <section class="panel">
         <label>OPERATOR</label>
@@ -209,6 +224,11 @@
         <label class="check"><input id="set-locks" type="checkbox" /> ENFORCE RANK LOCKS ON AIRLINE AIRCRAFT</label>
         <label for="set-ccy" class="pad-top">CURRENCY</label>
         <select id="set-ccy"></select>
+        <label for="set-temp" class="pad-top">TEMPERATURE</label>
+        <select id="set-temp">
+          <option value="C">CELSIUS (°C)</option>
+          <option value="F">FAHRENHEIT (°F)</option>
+        </select>
         <label for="home-input" class="pad-top">AIRLINE HOME FIELD</label>
         <div class="dep-search">
           <input id="home-input" type="text" placeholder="ICAO, IATA, NAME, CITY" autocomplete="off" spellcheck="false" />
@@ -218,13 +238,21 @@
       </section>
       <section class="panel">
         <label>PROGRESS</label>
-        <p class="muted">ERASES THE PILOT FILE, HANGAR, MONEY, XP, SORTIE LOG, AND COLLECTABLES ON THIS INSTALLATION.</p>
+        <p class="muted">ERASES THE PILOT FILE, HANGAR, MONEY, XP, SORTIE LOG, AND COLLECTABLES ON THIS INSTALLATION. THIS CANNOT BE UNDONE.</p>
+        <div class="row">
+          <button type="button" class="ghost" id="backup-export">EXPORT BACKUP</button>
+          <label class="file-btn">IMPORT BACKUP
+            <input id="backup-import" type="file" accept=".json,application/json" />
+          </label>
+        </div>
+        <p class="muted pad-top" id="backup-msg"></p>
         <button type="button" class="ghost" id="clear-all">CLEAR ALL PROGRESS</button>
       </section>
-      <section class="panel">
+      <section class="panel about-panel">
         <label>ABOUT</label>
         <p class="muted">TWOFLY · MIT LICENSE · 2026</p>
         <p class="muted">DESIGNED AND DIRECTED BY GAMINGLABRADOR5. SOFTWARE IMPLEMENTATION WITH GROK (XAI). FREEWARE. NOT AFFILIATED WITH MICROSOFT OR ASOBO STUDIO.</p>
+        <p class="about-ver">v1.4.6</p>
       </section>
     </div>
   </div>
@@ -247,12 +275,49 @@
       <div id="pedia-body"></div>
     </div>
   </div>
-  <script src="airports.js"></script>
-  <script src="aircraft.js"></script>
-  <script src="landmarks.js"></script>
-  <script src="cities.js"></script>
-  <script src="ports.js"></script>
-  <script src="pedia-copy.js"></script>
-  <script src="app.js"></script>
+  <div id="welcome" class="pedia" hidden>
+    <div class="pedia-sheet welcome-sheet">
+      <p class="pedia-kicker">TWOFLY</p>
+      <h2>WELCOME</h2>
+      <ol class="welcome-steps">
+        <li>Create your pilot in SETTINGS.</li>
+        <li>Pick a departure and an aircraft.</li>
+        <li>Issue a tasking. Fly it in the simulator.</li>
+        <li>Return here and press COMPLETE.</li>
+      </ol>
+      <p>FREE FLIGHT — fly any type. Pay only.</p>
+      <p>AIRLINE MODE — hangar fleet. Pay and XP. Certificates.</p>
+      <p class="muted">No connection to the simulator. You mark the sortie yourself.</p>
+      <footer class="job-foot">
+        <button type="button" class="sheet-yes" id="welcome-go">BEGIN</button>
+      </footer>
+    </div>
+  </div>
+  <!-- Airfields load as airports.json from app.js. Do not add airports.js as a blocking script. -->
+  <script>
+    (function () {
+      var el = document.getElementById("build-id");
+      fetch("/__twofly/version", { cache: "no-store" })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!el) return;
+          if (d && d.version) el.textContent = "EXE " + d.version + " · " + (d.build || "") + " · " + (d.addr || "");
+          else el.textContent = "JS only · no exe stamp";
+        })
+        .catch(function () { if (el) el.textContent = "JS only · no exe stamp"; });
+      setTimeout(function () {
+        var chip = document.getElementById("pilot-chip");
+        if (chip && !String(chip.innerHTML || "").trim()) {
+          chip.textContent = "DESK SCRIPT DID NOT START. Close TwoFly and reopen.";
+        }
+      }, 4000);
+    })();
+  </script>
+  <script src="aircraft.js?v=1.4.6"></script>
+  <script src="landmarks.js?v=1.4.6"></script>
+  <script src="cities.js?v=1.4.6"></script>
+  <script src="ports.js?v=1.4.6"></script>
+  <script src="pedia-copy.js?v=1.4.6"></script>
+  <script src="app.js?v=1.4.6"></script>
 </body>
 </html>

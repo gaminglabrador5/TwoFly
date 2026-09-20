@@ -1,7 +1,14 @@
 /* TwoFly — simple MSFS mission generator */
 (function () {
+  const VERSION = "1.4.6";
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/"/g, "&quot;");
+  }
 
   const AIRCRAFT = window.TWOFY_AIRCRAFT || [];
 
@@ -61,8 +68,8 @@
     MY: "Malaysia", SG: "Singapore", HK: "Hong Kong", TW: "Taiwan",
   };
 
-  const airports = window.AIRPORTS || [];
-  const byId = new Map(airports.map((a) => [a.id, a]));
+  let airports = Array.isArray(window.AIRPORTS) ? window.AIRPORTS : [];
+  let byId = new Map(airports.filter((a) => a && a.id).map((a) => [a.id, a]));
 
   const state = {
     dep: byId.get("KSKX") || airports[0],
@@ -75,6 +82,7 @@
     hard: false,
     acFilter: "all",
     acQuery: "",
+    acMaker: "",
     owned: loadOwned(),
     missionsBy: { free: [], airline: [] },
     activeBy: { free: null, airline: null },
@@ -96,7 +104,7 @@
   function loadLog() {
     try {
       const rows = JSON.parse(localStorage.getItem("twofly-log") || "[]");
-      return Array.isArray(rows) ? rows : [];
+      return Array.isArray(rows) ? rows.map(healMission).filter(Boolean) : [];
     } catch {
       return [];
     }
@@ -144,8 +152,8 @@
     const k = mode === "airline" ? "airline" : "free";
     try {
       const keyed = localStorage.getItem("twofly-active-" + k);
-      if (keyed) return JSON.parse(keyed);
-      if (k === "free") return JSON.parse(localStorage.getItem("twofly-active") || "null");
+      if (keyed) return healMission(JSON.parse(keyed));
+      if (k === "free") return healMission(JSON.parse(localStorage.getItem("twofly-active") || "null"));
       return null;
     } catch {
       return null;
@@ -246,7 +254,30 @@
   }
   function fieldCaption(a) {
     if (!a) return "";
-    return a.n || a.c || "";
+    if (typeof a === "string") {
+      const hit = byId.get(a);
+      return hit ? (hit.n || hit.c || a) : a;
+    }
+    return a.n || a.c || a.id || "";
+  }
+
+  function asField(x) {
+    if (!x) return null;
+    if (typeof x === "string") return byId.get(x) || { id: x, n: x };
+    if (typeof x === "object" && x.id) return byId.get(x.id) || x;
+    return null;
+  }
+
+  function icaoOf(x) {
+    const f = asField(x);
+    return (f && f.id) ? f.id : "----";
+  }
+
+  function healMission(m) {
+    if (!m || typeof m !== "object") return null;
+    if (m.dep) m.dep = asField(m.dep) || m.dep;
+    if (m.dest) m.dest = asField(m.dest) || m.dest;
+    return m;
   }
 
   function payText(m, active) {
@@ -291,6 +322,7 @@
       sinceService: {},
       tails: {},
       currency: "USD",
+      tempUnit: "C",
       home: "",
       debt: 0,
     };
@@ -315,6 +347,7 @@
         sinceService: raw.sinceService && typeof raw.sinceService === "object" ? raw.sinceService : {},
         tails: raw.tails && typeof raw.tails === "object" ? raw.tails : {},
         currency: typeof raw.currency === "string" ? raw.currency : "USD",
+        tempUnit: raw.tempUnit === "F" ? "F" : "C",
         home: typeof raw.home === "string" ? raw.home : "",
         debt: Number.isFinite(raw.debt) ? Math.max(0, raw.debt) : (raw.loan && Number.isFinite(raw.loan.remaining) ? Math.max(0, raw.loan.remaining) : 0),
       };
@@ -821,7 +854,7 @@
     const t = TYPES.find((x) => x.id === m.type);
     return [
       `TWOFLY DISPATCH`,
-      `${(t && t.label) || m.type}  ·  ${m.dep.id} ${fieldCaption(m.dep)} → ${m.dest.id} ${fieldCaption(m.dest)}  ·  ${m.dist} nm  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
+      `${(t && t.label) || m.type}  ·  ${icaoOf(m.dep)} ${fieldCaption(m.dep)} → ${icaoOf(m.dest)} ${fieldCaption(m.dest)}  ·  ${m.dist} nm  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
       `Aircraft: ${m.acName}${m.acTail ? "  " + m.acTail : ""}`,
       `Payload: ${m.pay.text}`,
       `Suggested: ${m.alt.toLocaleString()} ft · ETE ~${fmtEte(m.eteMin)}`,
@@ -882,6 +915,23 @@
     return parseInt(t, 10);
   }
 
+  function useF() {
+    return state.profile && state.profile.tempUnit === "F";
+  }
+
+  function fmtTempNum(c) {
+    if (c == null || Number.isNaN(c)) return null;
+    return useF() ? Math.round((c * 9) / 5 + 32) : Math.round(c);
+  }
+
+  function fmtTempPair(t, dp) {
+    const a = fmtTempNum(t);
+    if (a == null) return "—";
+    const u = useF() ? "°F" : "°C";
+    const b = fmtTempNum(dp);
+    return b == null ? `${a} ${u}` : `${a} / ${b} ${u}`;
+  }
+
   function flightCat(visSm, ceilingFt) {
     const vis = visSm == null ? 99 : visSm;
     const c = ceilingFt == null ? 99999 : ceilingFt;
@@ -922,7 +972,10 @@
     const wxg = [...raw.matchAll(/\s([+-]?(?:VC)?(?:MI|PR|BC|DR|BL|SH|TS|FZ)?(?:DZ|RA|SN|SG|IC|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PO|SQ|FC|SS|DS)+)\b/g)];
     if (wxg.length) out.wx = wxg.map((m) => m[1]).join(" ");
     const td = raw.match(/\b(M?\d{2})\/(M?\d{2})\b/);
-    if (td) out.temp = `${parseMetarTemp(td[1])} / ${parseMetarTemp(td[2])} °C`;
+    if (td) {
+      out.tempC = parseMetarTemp(td[1]);
+      out.dewC = parseMetarTemp(td[2]);
+    }
     const a = raw.match(/\bA(\d{4})\b/);
     const q = raw.match(/\bQ(\d{4})\b/);
     if (a) out.qnh = (parseInt(a[1], 10) / 100).toFixed(2) + " inHg";
@@ -1000,7 +1053,8 @@
         vis: visSm != null ? visSm + " SM" : "—",
         sky,
         wx: weatherCodeText(c.weather_code),
-        temp: c.temperature_2m != null ? Math.round(c.temperature_2m) + " °C" : "—",
+        tempC: c.temperature_2m != null ? Math.round(c.temperature_2m) : null,
+        dewC: null,
         qnh: c.pressure_msl != null ? Math.round(c.pressure_msl) + " hPa" : "—",
         cat: flightCat(visSm, cover >= 90 ? 2000 : cover >= 50 ? 4000 : 99999),
       },
@@ -1084,7 +1138,7 @@
         <div><span>VIS</span><b>${d.vis}</b></div>
         <div><span>SKY</span><b>${d.sky}</b></div>
         <div><span>WX</span><b>${d.wx}</b></div>
-        <div><span>TEMP / DP</span><b>${d.temp}</b></div>
+        <div><span>TEMP / DP</span><b>${fmtTempPair(d.tempC, d.dewC)}</b></div>
         <div><span>QNH</span><b>${d.qnh}</b></div>
         <div><span>CATEGORY</span><b class="wx-cat cat-${d.cat}">${d.cat}</b></div>
       </div>
@@ -1165,8 +1219,38 @@
     else if (list[0] && list[0].dest) loadWx(list[0].dest, false, "arr");
   }
 
+  function setAirports(list) {
+    airports = (list || []).filter((a) => a && a.id);
+    byId = new Map(airports.map((a) => [a.id, a]));
+    const saved = (() => { try { return localStorage.getItem("twofly-dep"); } catch (e) { return ""; } })();
+    if (!state.dep || !byId.get(state.dep.id)) {
+      state.dep = (saved && byId.get(saved)) || byId.get("KSKX") || airports[0] || null;
+    } else {
+      state.dep = byId.get(state.dep.id) || state.dep;
+    }
+    const n = $("#field-count");
+    if (n) n.textContent = airports.length.toLocaleString() + " AIRFIELDS ON FILE";
+    try { renderDep(); } catch (e) {}
+    try { renderHome(); } catch (e) {}
+  }
+
+  function loadAirports() {
+    const n = $("#field-count");
+    if (n && !airports.length) n.textContent = "LOADING AIRFIELDS…";
+    return fetch("airports.json?v=" + VERSION, { cache: "no-store" })
+      .then(function (r) { return r.ok ? r.json() : []; })
+      .then(function (data) {
+        if (Array.isArray(data) && data.length) setAirports(data);
+        else if (n) n.textContent = "0 AIRFIELDS ON FILE";
+      })
+      .catch(function () {
+        if (n && !airports.length) n.textContent = "AIRFIELDS FAILED TO LOAD";
+      });
+  }
+
   function airportOf(a) {
     if (!a) return null;
+    if (typeof a === "string") return byId.get(a) || null;
     return byId.get(a.id) || a;
   }
 
@@ -1273,7 +1357,7 @@
       if (yes) yes.textContent = "ABORT";
     } else if (kind === "all") {
       if (title) title.textContent = "CLEAR ALL PROGRESS";
-      if (copy) copy.textContent = "THIS ERASES THE PILOT FILE, HANGAR, MONEY, XP, SORTIE LOG, COLLECTABLES, AND ACTIVE TASKINGS ON THIS INSTALLATION. THIS CANNOT BE UNDONE.";
+      if (copy) copy.textContent = "THIS PERMANENTLY ERASES THE PILOT FILE, HANGAR, MONEY, XP, CERTIFICATES, SORTIE LOG, COLLECTABLES, AND ACTIVE TASKINGS ON THIS INSTALLATION. EXPORT A BACKUP FIRST IF YOU WANT TO KEEP THEM. THIS CANNOT BE UNDONE.";
       if (yes) yes.textContent = "CLEAR ALL";
     } else {
       if (title) title.textContent = "CLEAR SORTIE LOG";
@@ -1488,7 +1572,7 @@
           <span class="pay">${payText(m, true)}</span>
         </header>
         <div class="route">
-          <div><b>${m.dep.id}</b><span>${fieldCaption(m.dep)}</span></div>
+          <div><b>${icaoOf(m.dep)}</b><span>${fieldCaption(m.dep)}</span></div>
           <div class="arrow">→</div>
           <div><b>${icaoJump(m.dest)}</b><span>${fieldCaption(m.dest)}</span></div>
         </div>
@@ -1546,6 +1630,20 @@
     renderAcMeta();
   }
 
+  function pickAircraft(id) {
+    const ac = AIRCRAFT.find((a) => a.id === id);
+    if (!ac) return;
+    if (state.mode === "airline" && !canSelectAc(ac)) return;
+    state.ac = ac;
+    state.acMaker = ac.maker;
+    try { localStorage.setItem("twofly-ac", ac.id); } catch {}
+    fillTypeSelect();
+    syncMakerSelect();
+    renderAcMeta();
+    syncFav();
+  }
+  window.__twoflyPick = pickAircraft;
+
   function filteredAircraft() {
     const q = state.acQuery.trim().toLowerCase();
     return AIRCRAFT.filter((a) => {
@@ -1567,39 +1665,86 @@
     }).sort((a, b) => a.maker.localeCompare(b.maker) || a.name.localeCompare(b.name));
   }
 
-  function renderAircraft() {
-    const list = filteredAircraft();
-    const root = $("#ac-list");
-    if (!list.length) {
-      root.innerHTML = `<div class="empty tiny">${state.mode === "airline" ? "NO AIRCRAFT IN HANGAR. PURCHASE FROM THE HANGAR TAB." : "NO AIRCRAFT MATCH FILTER."}</div>`;
+  function uniqueMakers(list) {
+    const makers = [];
+    (list || filteredAircraft()).forEach((a) => {
+      if (!makers.includes(a.maker)) makers.push(a.maker);
+    });
+    return makers;
+  }
+
+  function syncFav() {
+    const fav = $("#ac-fav");
+    if (fav) fav.classList.toggle("mine", !!(state.ac && state.owned.has(state.ac.id)));
+  }
+
+  function syncMakerSelect() {
+    const el = $("#ac-maker");
+    if (!el) return;
+    const makers = uniqueMakers();
+    const key = makers.join("\n");
+    if (el.getAttribute("data-key") !== key) {
+      el.setAttribute("data-key", key);
+      el.innerHTML = makers
+        .map((m, i) => `<option value="${i}">${esc(m)}</option>`)
+        .join("");
+    }
+    let idx = makers.indexOf(state.acMaker);
+    if (idx < 0 && state.ac) idx = makers.indexOf(state.ac.maker);
+    if (idx < 0) idx = 0;
+    if (makers[idx]) state.acMaker = makers[idx];
+    if (el.options.length) el.selectedIndex = idx;
+  }
+
+  function fillTypeSelect() {
+    const sel = $("#ac-select");
+    if (!sel) return;
+    const types = filteredAircraft().filter((a) => a.maker === state.acMaker);
+    if (!types.length) {
+      sel.innerHTML = `<option value="">${state.mode === "airline" ? "NO AIRCRAFT IN HANGAR" : "NO MATCH"}</option>`;
       return;
     }
-    let html = "";
-    let last = "";
-    for (const a of list) {
-      if (a.maker !== last) {
-        html += `<div class="ac-group">${a.maker}</div>`;
-        last = a.maker;
-      }
-      const on = state.ac && state.ac.id === a.id;
-      const mine = state.owned.has(a.id);
-      const airline = state.mode === "airline";
-      const locked = airline && state.profile.locksOn && !classUnlocked(a.cls);
-      const needBuy = false;
-      const tail = tailOf(a.id);
-      html += `<button type="button" class="ac-row${on ? " on" : ""}${locked || needBuy ? " locked" : ""}" data-id="${a.id}">
-        <span class="ac-star${mine ? " mine" : ""}" data-star="${a.id}" title="FAVORITE">★</span>
-        <span class="ac-name">${a.name}${tail ? " · " + tail : ""}${locked ? " · LOCKED" : needBuy ? " · MARKET" : airline && needsService(a.id) ? " · SERVICE DUE" : ""}</span>
-        <span class="ac-spec">${a.cruise}kt · ${a.range}nm</span>
-      </button>`;
+    if (!state.ac || !types.some((a) => a.id === state.ac.id)) {
+      state.ac = types[0];
+      try { localStorage.setItem("twofly-ac", state.ac.id); } catch {}
     }
-    root.innerHTML = html;
+    sel.innerHTML = types
+      .map((a) => {
+        const extra = [];
+        const tail = tailOf(a.id);
+        if (tail) extra.push(tail);
+        extra.push(a.cruise + " kt");
+        if (state.mode === "airline" && state.profile.locksOn && !classUnlocked(a.cls)) extra.push("LOCKED");
+        else if (state.mode === "airline" && needsService(a.id)) extra.push("SERVICE DUE");
+        return `<option value="${esc(a.id)}"${state.ac && state.ac.id === a.id ? " selected" : ""}>${esc(a.name)}${extra.length ? " · " + extra.join(" · ") : ""}</option>`;
+      })
+      .join("");
+    syncFav();
+  }
+
+  function renderAircraft() {
+    const list = filteredAircraft();
+    const makerEl = $("#ac-maker");
+    const sel = $("#ac-select");
+    if (!makerEl || !sel) return;
+    if (!list.length) {
+      makerEl.innerHTML = "";
+      makerEl.removeAttribute("data-key");
+      sel.innerHTML = `<option value="">${state.mode === "airline" ? "NO AIRCRAFT IN HANGAR" : "NO MATCH"}</option>`;
+      syncFav();
+      return;
+    }
+    if (state.ac && list.some((a) => a.id === state.ac.id)) state.acMaker = state.ac.maker;
+    syncMakerSelect();
+    fillTypeSelect();
   }
 
   function renderAcMeta() {
     const a = state.ac;
+    const el = $("#ac-meta");
+    if (!el) return;
     if (!a) {
-      $("#ac-meta").innerHTML = "";
+      el.innerHTML = "";
       return;
     }
     $("#ac-meta").innerHTML = `
@@ -1618,13 +1763,15 @@
 
   function renderDep() {
     const a = state.dep;
+    const card = $("#dep-card");
+    if (!card) return;
     if (!a) {
-      $("#dep-card").innerHTML = `<div class="muted">ENTER ICAO.</div>`;
+      card.innerHTML = `<div class="muted">ENTER ICAO.</div>`;
       return;
     }
-    $("#dep-card").innerHTML = `
+    card.innerHTML = `
       <div class="icao">${a.id}${a.iata ? `<small>${a.iata}</small>` : ""}</div>
-      <div class="name">${a.n}</div>
+      <div class="name">${a.n || ""}</div>
       <div class="sub">${[a.c, COUNTRIES[a.cc] || a.cc].filter(Boolean).join(" · ")}</div>
       <div class="chips">
         <span>${fieldKind(a)}</span>
@@ -1633,7 +1780,8 @@
         ${a.el != null ? `<span>${a.el.toLocaleString()} ft elev</span>` : ""}
       </div>
     `;
-    $("#dep-input").value = a.id;
+    const inp = $("#dep-input");
+    if (inp) inp.value = a.id;
   }
 
   function renderMissions() {
@@ -1652,7 +1800,7 @@
             <span class="pay">${payText(m, false)}</span>
           </header>
           <div class="route">
-            <div><b>${m.dep.id}</b><span>${fieldCaption(m.dep)}</span></div>
+            <div><b>${icaoOf(m.dep)}</b><span>${fieldCaption(m.dep)}</span></div>
             <div class="arrow">→</div>
             <div><b>${icaoJump(m.dest)}</b><span>${fieldCaption(m.dest)}</span></div>
           </div>
@@ -1712,10 +1860,13 @@
         : "");
     }
     const blurbLong = $("#desk-blurb-long");
+    const modeLine = $("#mode-line");
     if (state.mode === "airline") {
-      if (blurbLong) blurbLong.textContent = "AIRLINE MODE ISSUES REVENUE TASKINGS USING AIRCRAFT ON THE HANGAR LINE ONLY. PAY AND XP POST TO THE PILOT FILE. RANK LOCKS AND MAINTENANCE APPLY WHEN ENABLED. HOME SETS THE AIRLINE BASE. PURCHASE TYPES FROM THE HANGAR TAB.";
+      if (blurbLong) blurbLong.textContent = "AIRLINE MODE generates revenue taskings using only aircraft currently in your hangar. Completing a tasking adds both pay and XP to your pilot file. Rank restrictions and maintenance apply when enabled. Use HOME to set your airline base, and purchase aircraft types from the HANGAR tab.";
+      if (modeLine) modeLine.textContent = "AIRLINE MODE — hangar fleet. Pay and XP. Certificates.";
     } else {
-      if (blurbLong) blurbLong.textContent = "FREE FLIGHT ISSUES CIVILIAN TASKINGS FROM ANY AIRFIELD. EVERY TYPE ON FILE IS ELIGIBLE. COMPLETED SORTIES POST PAY TO THE PILOT FILE. RANK LOCKS AND HANGAR OWNERSHIP DO NOT APPLY.";
+      if (blurbLong) blurbLong.textContent = "FREE FLIGHT lets you take civilian taskings from any airfield. Every aircraft type in your files is eligible. Completing a sortie adds the payment to your pilot file. Rank restrictions and hangar ownership do not apply.";
+      if (modeLine) modeLine.textContent = "FREE FLIGHT — fly any type. Pay only.";
     }
     renderHome();
   }
@@ -1849,6 +2000,7 @@
     const money = $("#set-money");
     const locks = $("#set-locks");
     const ccyEl = $("#set-ccy");
+    const tempEl = $("#set-temp");
     if (money) money.checked = !!state.profile.moneyOn;
     if (locks) locks.checked = !!state.profile.locksOn;
     if (ccyEl) {
@@ -1859,6 +2011,7 @@
       }
       ccyEl.value = ccy().id;
     }
+    if (tempEl) tempEl.value = useF() ? "F" : "C";
     renderHome();
   }
 
@@ -1929,7 +2082,7 @@
         return `
         <div class="log-row">
           <div>
-            <b>${m.dep.id} → ${m.dest.id}</b>
+            <b>${icaoOf(m.dep)} → ${icaoOf(m.dest)}</b>
             <span>${fieldCaption(m.dep)} → ${fieldCaption(m.dest)}</span>
             <span>${mode}${when ? " · " + when : ""} · ${TYPES.find((t) => t.id === m.type)?.label || m.type} · ${m.dist} nm · ${m.acName}${m.flown ? " · flown" : ""} · ${pay}</span>
           </div>
@@ -1993,6 +2146,7 @@
     if (q.length < 2) return [];
     const hits = [];
     for (const a of airports) {
+      if (!a || !a.id) continue;
       if (a.id.startsWith(q) || (a.iata && a.iata.startsWith(q))) hits.push(a);
       if (hits.length >= 12) return hits;
     }
@@ -2009,37 +2163,48 @@
   }
 
   function bind() {
-    $("#ac-search").addEventListener("input", (e) => {
+    $("#ac-search")?.addEventListener("input", (e) => {
       state.acQuery = e.target.value;
       renderAircraft();
+      renderAcMeta();
     });
-    $("#ac-filters").addEventListener("click", (e) => {
+    $("#ac-filters")?.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-filter]");
       if (!btn) return;
       state.acFilter = btn.dataset.filter;
       $$("#ac-filters [data-filter]").forEach((b) => b.classList.toggle("on", b === btn));
       renderAircraft();
-    });
-    $("#ac-list").addEventListener("click", (e) => {
-      const star = e.target.closest("[data-star]");
-      if (star) {
-        e.preventDefault();
-        const id = star.dataset.star;
-        if (state.owned.has(id)) state.owned.delete(id);
-        else state.owned.add(id);
-        saveOwned();
-        renderAircraft();
-        return;
-      }
-      const row = e.target.closest(".ac-row");
-      if (!row) return;
-      const ac = AIRCRAFT.find((a) => a.id === row.dataset.id);
-      if (!ac) return;
-      if (!canSelectAc(ac)) return;
-      state.ac = ac;
-      localStorage.setItem("twofly-ac", state.ac.id);
-      renderAircraft();
       renderAcMeta();
+    });
+    $("#ac-maker")?.addEventListener("change", (e) => {
+      const makers = uniqueMakers();
+      const i = e.target.selectedIndex;
+      state.acMaker = makers[i] || "";
+      const types = filteredAircraft().filter((a) => a.maker === state.acMaker);
+      if (types[0]) {
+        state.ac = types[0];
+        try { localStorage.setItem("twofly-ac", state.ac.id); } catch {}
+      }
+      fillTypeSelect();
+      renderAcMeta();
+    });
+    $("#ac-select")?.addEventListener("change", (e) => {
+      const ac = AIRCRAFT.find((a) => a.id === e.target.value);
+      if (!ac) return;
+      if (state.mode === "airline" && !canSelectAc(ac)) return;
+      state.ac = ac;
+      state.acMaker = ac.maker;
+      try { localStorage.setItem("twofly-ac", ac.id); } catch {}
+      renderAcMeta();
+      syncFav();
+    });
+    $("#ac-fav")?.addEventListener("click", () => {
+      if (!state.ac) return;
+      const id = state.ac.id;
+      if (state.owned.has(id)) state.owned.delete(id);
+      else state.owned.add(id);
+      saveOwned();
+      renderAircraft();
     });
     $("#view-desk")?.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-wx-refresh]");
@@ -2048,12 +2213,13 @@
       if (slot === "arr") loadWx(state.active && state.active.dest, true, "arr");
       else loadWx(state.dep, true, "dep");
     });
-    $("#hop").addEventListener("change", (e) => (state.hop = e.target.value));
-    $("#type").addEventListener("change", (e) => (state.type = e.target.value));
-    $("#hard").addEventListener("change", (e) => (state.hard = e.target.checked));
+    $("#hop")?.addEventListener("change", (e) => (state.hop = e.target.value));
+    $("#type")?.addEventListener("change", (e) => (state.type = e.target.value));
+    $("#hard")?.addEventListener("change", (e) => (state.hard = e.target.checked));
 
     const box = $("#suggest");
     const input = $("#dep-input");
+    if (input && box) {
     input.addEventListener("input", () => {
       const hits = searchAirports(input.value);
       if (!hits.length) {
@@ -2081,9 +2247,11 @@
       selectDep(byId.get(btn.dataset.id));
       box.hidden = true;
     });
+    } // input && box
     document.addEventListener("click", (e) => {
       if (!e.target.closest(".dep-search")) {
-        box.hidden = true;
+        const sg = $("#suggest");
+        if (sg) sg.hidden = true;
         const hs = $("#home-suggest");
         if (hs) hs.hidden = true;
       }
@@ -2227,6 +2395,19 @@
     $("#clear-log").addEventListener("click", () => openConfirm("log"));
     $("#clear-book")?.addEventListener("click", () => openConfirm("book"));
     $("#clear-all")?.addEventListener("click", () => openConfirm("all"));
+    $("#backup-export")?.addEventListener("click", exportBackup);
+    $("#backup-import")?.addEventListener("change", (e) => {
+      const f = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try { importBackup(JSON.parse(String(reader.result || ""))); }
+        catch { setBackupMsg("BACKUP FILE IS NOT VALID JSON."); }
+      };
+      reader.readAsText(f);
+    });
+    $("#welcome-go")?.addEventListener("click", dismissWelcome);
     $("#confirm-no").addEventListener("click", () => {
       state.pendingClear = "";
       $("#confirm").hidden = true;
@@ -2281,6 +2462,17 @@
         renderActive();
       }
       document.body.classList.toggle("mode-airline", state.mode === "airline");
+      const modeLine = $("#mode-line");
+      if (modeLine) {
+        if (tab === "desk" || tab === "line") {
+          modeLine.hidden = false;
+          modeLine.textContent = tab === "line"
+            ? "AIRLINE MODE — hangar fleet. Pay and XP. Certificates."
+            : "FREE FLIGHT — fly any type. Pay only.";
+        } else {
+          modeLine.hidden = true;
+        }
+      }
       $$("#tabs button").forEach((b) => b.classList.toggle("on", b === btn));
       const deskOn = tab === "desk" || tab === "line";
       $("#view-desk").hidden = !deskOn;
@@ -2400,6 +2592,13 @@
       renderActive();
       renderLog();
     });
+    $("#set-temp")?.addEventListener("change", (e) => {
+      state.profile.tempUnit = e.target.value === "F" ? "F" : "C";
+      saveProfile();
+      if (state.dep) loadWx(state.dep, false, "dep");
+      if (state.active && state.active.dest) loadWx(state.active.dest, false, "arr");
+      else if (state.missions[0] && state.missions[0].dest) loadWx(state.missions[0].dest, false, "arr");
+    });
     window.addEventListener("offline", () => {
       wxOfflineFlag = true;
       if (state.dep) loadWx(state.dep, true, "dep");
@@ -2486,26 +2685,40 @@
       if (m.flown && !m.xp) m.xp = xpFor(m);
     });
 
-    $("#type").innerHTML =
-      `<option value="any">ANY AUTHORIZED CATEGORY</option>` +
-      TYPES.map((t) => `<option value="${t.id}">${t.label}</option>`).join("");
+    const typeEl = $("#type");
+    if (typeEl) {
+      typeEl.innerHTML =
+        `<option value="any">ANY AUTHORIZED CATEGORY</option>` +
+        TYPES.map((t) => `<option value="${t.id}">${t.label}</option>`).join("");
+    }
+    const ver = $(".about-ver");
+    if (ver) ver.textContent = "v" + VERSION;
+    stampBuild();
 
-    renderAircraft();
-    renderAcMeta();
-    renderDep();
-    loadWx(state.dep);
-    if (state.active && state.active.dest) loadWx(state.active.dest, false, "arr");
-    else loadWx(null, false, "arr");
-    renderMissions();
-    renderActive();
-    renderLog();
-    renderBook();
-    renderPilotChip();
-    renderAirline();
-    renderHangar();
-    renderSettings();
-    bind();
-    persistStore();
+    const run = (fn) => { try { fn(); } catch (e) { console.error(e); } };
+    run(renderAircraft);
+    run(renderAcMeta);
+    run(renderDep);
+    run(() => loadWx(state.dep));
+    run(() => {
+      if (state.active && state.active.dest) loadWx(state.active.dest, false, "arr");
+      else loadWx(null, false, "arr");
+    });
+    run(renderMissions);
+    run(renderActive);
+    run(renderLog);
+    run(renderBook);
+    run(renderPilotChip);
+    run(renderAirline);
+    run(() => {
+      const n = $("#field-count");
+      if (n) n.textContent = `${airports.length.toLocaleString()} AIRFIELDS ON FILE`;
+    });
+    run(renderHangar);
+    run(renderSettings);
+    run(bind);
+    run(persistStore);
+    run(maybeWelcome);
 
     window.addEventListener("pagehide", flushStore);
     window.addEventListener("beforeunload", flushStore);
@@ -2520,9 +2733,106 @@
     "twofly-pilot-file", "twofly-log", "twofly-pedia", "twofly-active",
     "twofly-active-free", "twofly-active-airline", "twofly-collection",
     "twofly-owned", "twofly-ac", "twofly-dep", "twofly-pilot",
+    "twofly-seen-welcome",
   ];
 
   let persistT = 0;
+  function setBackupMsg(t) {
+    const el = $("#backup-msg");
+    if (el) el.textContent = t || "";
+  }
+
+  function exportBackup() {
+    const pack = {
+      v: 1,
+      app: "TwoFly",
+      version: VERSION,
+      at: new Date().toISOString(),
+      store: collectStore(),
+    };
+    const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    const day = new Date().toISOString().slice(0, 10);
+    a.href = URL.createObjectURL(blob);
+    a.download = "TwoFly-backup-" + day + ".json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    setBackupMsg("BACKUP SAVED AS TwoFly-backup-" + day + ".json");
+  }
+
+  function importBackup(pack) {
+    const store = pack && (pack.store || pack);
+    if (!store || typeof store !== "object" || Array.isArray(store)) {
+      setBackupMsg("BACKUP FILE IS NOT A TWOFLY PILOT FILE.");
+      return;
+    }
+    const keys = Object.keys(store).filter((k) => k.indexOf("twofly-") === 0);
+    if (!keys.length) {
+      setBackupMsg("BACKUP FILE HAS NO PILOT DATA.");
+      return;
+    }
+    keys.forEach((k) => {
+      if (store[k] == null) localStorage.removeItem(k);
+      else localStorage.setItem(k, String(store[k]));
+    });
+    flushStore();
+    reloadFromStorage();
+    renderPilotChip();
+    renderHangar();
+    renderLog();
+    renderBook();
+    renderAircraft();
+    renderAcMeta();
+    renderAirline();
+    renderMissions();
+    renderActive();
+    renderSettings();
+    renderRank();
+    setBackupMsg("BACKUP RESTORED.");
+  }
+
+  function dismissWelcome() {
+    try { localStorage.setItem("twofly-seen-welcome", "1"); } catch {}
+    persistStore();
+    const el = $("#welcome");
+    if (el) el.hidden = true;
+  }
+
+  function maybeWelcome() {
+    const el = $("#welcome");
+    if (!el) return;
+    try {
+      if (localStorage.getItem("twofly-seen-welcome")) return;
+    } catch {}
+    if ((state.profile && state.profile.xp > 0) || (state.log && state.log.length)) {
+      dismissWelcome();
+      return;
+    }
+    el.hidden = false;
+  }
+
+  function stampBuild() {
+    const el = $("#build-id");
+    const about = $(".about-ver");
+    const paint = (exe, build, addr) => {
+      const line = exe
+        ? `EXE ${exe} · ${build || "?"} · ${addr || ""}`
+        : `JS v${VERSION} · no exe stamp`;
+      if (el) el.textContent = line;
+      if (about) about.textContent = exe ? `v${VERSION} · EXE ${exe} ${build || ""}` : "v" + VERSION;
+      document.title = exe ? `TwoFly ${exe}` : `TwoFly v${VERSION}`;
+    };
+    fetch("/__twofly/version", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!d || !d.version) return;
+        paint(d.version, d.build, d.addr);
+      })
+      .catch(() => {});
+  }
+
   function persistStore() {
     clearTimeout(persistT);
     persistT = setTimeout(flushStore, 250);
@@ -2588,32 +2898,36 @@
     renderRank();
   }
 
-  async function hydrateStore() {
-    try {
-      const r = await fetch("/__twofly/store", { cache: "no-store" });
-      if (!r.ok) return;
-      const data = await r.json();
-      if (!data || typeof data !== "object") return;
-      Object.keys(data).forEach((k) => {
-        if (k.indexOf("twofly-") === 0 && typeof data[k] === "string") {
-          localStorage.setItem(k, data[k]);
-        }
-      });
-    } catch {}
+  function hydrateStore() {
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const to = setTimeout(function () { if (ctrl) try { ctrl.abort(); } catch (e) {} }, 800);
+    return fetch("/__twofly/store", { cache: "no-store", signal: ctrl && ctrl.signal })
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (data) {
+        if (!data || typeof data !== "object") return;
+        Object.keys(data).forEach(function (k) {
+          if (k.indexOf("twofly-") === 0 && typeof data[k] === "string") {
+            try { localStorage.setItem(k, data[k]); } catch (e) {}
+          }
+        });
+      })
+      .catch(function () {})
+      .then(function () { clearTimeout(to); });
   }
 
-  async function boot() {
-    await hydrateStore();
-    reloadFromStorage();
-    init();
+  function boot() {
+    try { stampBuild(); } catch (e) {}
+    try { init(); } catch (err) {
+      var el = document.getElementById("pilot-chip");
+      if (el) el.textContent = "DESK ERROR. " + (err && err.message ? err.message : String(err));
+      try { bind(); } catch (e2) {}
+    }
+    loadAirports();
+    hydrateStore().then(function () {
+      try { reloadFromStorage(); } catch (e) {}
+      try { renderPilotChip(); renderLog(); renderBook(); renderHangar(); renderAirline(); renderAircraft(); renderDep(); } catch (e) {}
+    });
   }
 
-  if (!airports.length) {
-    document.body.insertAdjacentHTML(
-      "afterbegin",
-      `<div class="empty">Airport data didn’t load. Keep airports.js next to index.html.</div>`
-    );
-    return;
-  }
   boot();
 })();

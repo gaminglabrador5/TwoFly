@@ -21,7 +21,8 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-const deskAddr = "127.0.0.1:17824"
+const appVersion = "1.4.6"
+const appBuild = "20260919e"
 
 func dataDir() string {
 	base := os.Getenv("LOCALAPPDATA")
@@ -93,13 +94,14 @@ func browserCandidates() []string {
 }
 
 func openDesk(url string) error {
-	profile := filepath.Join(os.Getenv("LOCALAPPDATA"), "TwoFly", "profile")
+	profile := filepath.Join(os.Getenv("LOCALAPPDATA"), "TwoFly", "edge-145")
 	_ = os.MkdirAll(profile, 0755)
 	args := []string{
 		"--app=" + url,
 		"--user-data-dir=" + profile,
 		"--no-first-run",
 		"--no-default-browser-check",
+		"--disable-http-cache",
 		"--disable-features=Translate",
 	}
 	for _, bin := range browserCandidates() {
@@ -123,6 +125,8 @@ func openDesk(url string) error {
 func sidecarHandler(disks map[string]string, embedRoot fs.FS) http.Handler {
 	embed := http.FileServer(http.FS(embedRoot))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
 		for prefix, root := range disks {
 			if root == "" {
 				continue
@@ -136,7 +140,6 @@ func sidecarHandler(disks map[string]string, embedRoot fs.FS) http.Handler {
 			full := filepath.Join(root, rel)
 			if inDir(root, full) {
 				if fi, err := os.Stat(full); err == nil && !fi.IsDir() {
-					w.Header().Set("Cache-Control", "no-store")
 					http.ServeFile(w, r, full)
 					return
 				}
@@ -204,16 +207,23 @@ func main() {
 	}
 	diskStamps := sidecarDir("stamps")
 	diskPilots := sidecarDir("pilots")
-	ln, err := net.Listen("tcp", deskAddr)
-	if err != nil {
-		url := "http://" + deskAddr + "/"
-		logf("listen: %v — opening existing desk %s", err, url)
-		if openErr := openDesk(url); openErr != nil {
-			alert("TwoFly", "Could not start the local desk.\n"+err.Error())
+	var ln net.Listener
+	var addr string
+	var errListen error
+	for p := 17824; p <= 17834; p++ {
+		try := fmt.Sprintf("127.0.0.1:%d", p)
+		ln, errListen = net.Listen("tcp", try)
+		if errListen == nil {
+			addr = try
+			break
 		}
+		logf("listen %s: %v", try, errListen)
+	}
+	if ln == nil {
+		alert("TwoFly", "Could not start the local desk.\nClose other TwoFly windows, then try again.")
 		return
 	}
-	url := "http://" + deskAddr + "/"
+	url := "http://" + addr + "/"
 	logf("serve %s", url)
 
 	var lastPing atomic.Int64
@@ -223,6 +233,12 @@ func main() {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(204)
+	})
+	mux.HandleFunc("/__twofly/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"app":"TwoFly","version":"%s","build":"%s","addr":"%s"}`, appVersion, appBuild, addr)
 	})
 	mux.HandleFunc("/__twofly/store", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
