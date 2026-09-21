@@ -17,6 +17,13 @@ Windows 10 / 11, 64-bit.
 Uses the Microsoft Edge WebView2 Runtime (already on most Windows 10/11 PCs).
 If TwoFly asks for it: https://go.microsoft.com/fwlink/p/?LinkId=2124703
 
+Windows SmartScreen
+-------------------
+Unsigned portable programs often show "Windows protected your PC".
+Click More info, then Run anyway. This is expected. TwoFly is not
+code-signed. Defender is not reporting a virus; it is blocking an
+unknown new executable.
+
 Use
 ---
 FREE FLIGHT — fly any type. Pay only.
@@ -57,4 +64,4 @@ Airfield data: OurAirports (public domain).
 IBM Plex fonts: SIL Open Font License 1.1.
 Not affiliated with Microsoft, Asobo, or any payware studio.
 
-TwoFly v1.5.0
+TwoFly v1.5.5

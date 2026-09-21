@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TwoFly — Dispatch</title>
-  <link rel="stylesheet" href="style.css?v=1.5.0" />
+  <link rel="stylesheet" href="style.css?v=1.5.5" />
 </head>
 <body>
   <div class="wrap">
@@ -12,6 +12,7 @@
       <div class="brand">
         <h1 class="logo">Two<span>Fly</span></h1>
         <p class="motto">TIME TO FLY</p>
+        <p class="tiny clock" id="desk-clock"></p>
         <p class="tiny" id="field-count"></p>
       </div>
       <div id="pilot-chip" class="pilot-chip"></div>
@@ -147,9 +148,9 @@
         <h3 class="album-h folded" data-fold="fields">AIRFIELDS</h3>
         <div id="stamps" class="stamps folded" data-fold-body="fields"></div>
       </section>
-      <section class="panel">
-        <button type="button" class="fold-toggle" id="ach-toggle">ACHIEVEMENTS</button>
-        <div id="badges-book" class="badges" hidden></div>
+      <section class="panel ach-panel">
+        <h3 class="album-h folded" data-fold="achievements">ACHIEVEMENTS <span id="ach-count" class="muted"></span></h3>
+        <div id="badges-book" class="ach-book folded" data-fold-body="achievements"></div>
       </section>
     </div>
 
@@ -218,8 +219,17 @@
       </section>
       <section class="panel">
         <label>DISPATCH SETTINGS</label>
-        <label class="check"><input id="set-money" type="checkbox" /> AWARD MONEY</label>
-        <label class="check"><input id="set-locks" type="checkbox" /> ENFORCE RANK LOCKS ON AIRLINE AIRCRAFT</label>
+        <label class="check"><input id="set-money" type="checkbox" /> AIRPLANES COST MONEY</label>
+        <label class="check"><input id="set-locks" type="checkbox" /> ENFORCE RANK UNLOCKS</label>
+        <label class="check"><input id="set-service" type="checkbox" /> AIRFRAME SERVICE</label>
+        <label class="check"><input id="set-interest" type="checkbox" /> INTEREST ON DEBT (1% PER DAY)</label>
+        <label class="check"><input id="set-sound" type="checkbox" /> DESK SOUND</label>
+        <button type="button" class="tiny" id="sound-test">PLAY SAMPLE</button>
+        <label for="set-clock" class="pad-top">CLOCK</label>
+        <select id="set-clock">
+          <option value="24">24-HOUR</option>
+          <option value="12">12-HOUR</option>
+        </select>
         <label for="set-ccy" class="pad-top">CURRENCY</label>
         <select id="set-ccy"></select>
         <label for="set-temp" class="pad-top">TEMPERATURE</label>
@@ -250,7 +260,7 @@
         <label>ABOUT</label>
         <p>TWOFLY · MIT LICENSE · 2026</p>
         <p>A project designed and directed by gaminglabrador5, with software development assistance from Grok (xAI). Released as freeware. TwoFly is an independent project and is not affiliated with Microsoft or Asobo Studio.</p>
-        <p class="about-ver" id="about-ver">EXE 1.5.0</p>
+        <p class="about-ver" id="about-ver">JS v1.5.5</p>
       </section>
     </div>
   </div>
@@ -263,6 +273,16 @@
       <footer class="job-foot">
         <button type="button" class="sheet-yes" id="confirm-yes">CLEAR</button>
         <button type="button" class="sheet-no" id="confirm-no">CANCEL</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="debrief" class="pedia" hidden>
+    <div class="pedia-sheet debrief-sheet">
+      <p class="pedia-kicker">SORTIE COMPLETE</p>
+      <div id="debrief-body"></div>
+      <footer class="job-foot">
+        <button type="button" class="sheet-yes" id="debrief-go">CONTINUE</button>
       </footer>
     </div>
   </div>
@@ -298,9 +318,9 @@
         .then(function (d) {
           if (!el) return;
           if (d && d.version) el.textContent = "EXE " + d.version + " · " + (d.build || "");
-          else el.textContent = "JS v1.5.0";
+          else el.textContent = "JS v1.5.5";
         })
-        .catch(function () { if (el) el.textContent = "JS v1.5.0"; });
+        .catch(function () { if (el) el.textContent = "JS v1.5.5"; });
       setTimeout(function () {
         var chip = document.getElementById("pilot-chip");
         if (chip && !String(chip.innerHTML || "").trim()) {
@@ -309,11 +329,11 @@
       }, 4000);
     })();
   </script>
-  <script src="aircraft.js?v=1.5.0"></script>
-  <script src="landmarks.js?v=1.5.0"></script>
-  <script src="cities.js?v=1.5.0"></script>
-  <script src="ports.js?v=1.5.0"></script>
-  <script src="pedia-copy.js?v=1.5.0"></script>
-  <script src="app.js?v=1.5.0"></script>
+  <script src="aircraft.js?v=1.5.5"></script>
+  <script src="landmarks.js?v=1.5.5"></script>
+  <script src="cities.js?v=1.5.5"></script>
+  <script src="ports.js?v=1.5.5"></script>
+  <script src="pedia-copy.js?v=1.5.5"></script>
+  <script src="app.js?v=1.5.5"></script>
 </body>
 </html>

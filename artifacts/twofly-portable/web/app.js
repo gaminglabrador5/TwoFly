@@ -1,6 +1,7 @@
 /* TwoFly — simple MSFS mission generator */
 (function () {
-  const VERSION = "1.5.0";
+  const VERSION = "1.5.5";
+  let sessionFlights = 0;
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
   function esc(s) {
@@ -8,6 +9,123 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/"/g, "&quot;");
+  }
+
+  let audioCtx = null;
+  let masterGain = null;
+  function soundEnabled() {
+    return !(state && state.profile && state.profile.soundOn === false);
+  }
+  function ensureAudio() {
+    if (!soundEnabled()) return null;
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtx) {
+      audioCtx = new AC();
+      masterGain = audioCtx.createGain();
+      masterGain.gain.value = 0.55;
+      masterGain.connect(audioCtx.destination);
+    }
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(function () {});
+    return audioCtx;
+  }
+  function envGain(ctx, peak, dur, delay) {
+    const g = ctx.createGain();
+    const t = ctx.currentTime + (delay || 0);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    g.connect(masterGain || ctx.destination);
+    return { g: g, t: t };
+  }
+  function tone(freq, dur, type, peak, delay, slide) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const eg = envGain(ctx, peak || 0.16, dur, delay);
+    const o = ctx.createOscillator();
+    o.type = type || "sine";
+    o.frequency.setValueAtTime(freq, eg.t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(slide, eg.t + dur);
+    o.connect(eg.g);
+    o.start(eg.t);
+    o.stop(eg.t + dur + 0.03);
+  }
+  function noise(dur, peak, freq, delay) {
+    const ctx = ensureAudio();
+    if (!ctx) return;
+    const n = Math.max(1, Math.floor(ctx.sampleRate * dur));
+    const buf = ctx.createBuffer(1, n, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const f = ctx.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = freq || 1800;
+    f.Q.value = 0.9;
+    const eg = envGain(ctx, peak || 0.18, dur, delay);
+    src.connect(f);
+    f.connect(eg.g);
+    src.start(eg.t);
+  }
+  function sfx(kind) {
+    if (!soundEnabled()) return;
+    ensureAudio();
+    switch (kind) {
+      case "click":
+        noise(0.04, 0.22, 2400, 0);
+        tone(1900, 0.04, "square", 0.05, 0);
+        break;
+      case "tab":
+        noise(0.05, 0.18, 1400, 0);
+        tone(420, 0.06, "triangle", 0.08, 0);
+        break;
+      case "issue":
+        noise(0.07, 0.2, 2100, 0);
+        tone(880, 0.05, "square", 0.07, 0);
+        noise(0.05, 0.14, 2500, 0.07);
+        tone(990, 0.05, "square", 0.06, 0.08);
+        noise(0.08, 0.16, 1800, 0.16);
+        tone(660, 0.12, "triangle", 0.1, 0.2, 440);
+        break;
+      case "accept":
+        tone(880, 0.09, "sine", 0.18, 0);
+        tone(1320, 0.14, "sine", 0.16, 0.08);
+        break;
+      case "complete":
+        tone(523.25, 0.16, "sine", 0.2, 0);
+        tone(659.25, 0.18, "sine", 0.18, 0.09);
+        tone(783.99, 0.28, "sine", 0.22, 0.18);
+        tone(1046.5, 0.22, "triangle", 0.08, 0.28);
+        break;
+      case "abort":
+        noise(0.08, 0.16, 400, 0);
+        tone(220, 0.18, "triangle", 0.16, 0, 110);
+        break;
+      case "money":
+        tone(1318, 0.08, "sine", 0.14, 0);
+        tone(1760, 0.14, "sine", 0.16, 0.06);
+        break;
+      case "stamp":
+        noise(0.09, 0.28, 900, 0);
+        tone(140, 0.12, "square", 0.08, 0);
+        break;
+      case "ach":
+        tone(784, 0.12, "sine", 0.16, 0);
+        tone(988, 0.14, "sine", 0.16, 0.1);
+        tone(1319, 0.28, "sine", 0.2, 0.2);
+        break;
+      case "error":
+        tone(180, 0.16, "sawtooth", 0.1, 0);
+        noise(0.1, 0.1, 500, 0);
+        break;
+      case "select":
+        tone(640, 0.07, "sine", 0.1, 0);
+        noise(0.03, 0.1, 1600, 0);
+        break;
+      default:
+        sfx("click");
+    }
   }
 
   const AIRCRAFT = window.TWOFY_AIRCRAFT || [];
@@ -316,6 +434,11 @@
       money: 85000,
       moneyOn: true,
       locksOn: true,
+      serviceOn: true,
+      clock12: false,
+      interestOn: true,
+      lastInterestAt: Date.now(),
+      soundOn: true,
       hangar: ["c172g"],
       showAirline: true,
       hours: {},
@@ -325,7 +448,33 @@
       tempUnit: "C",
       home: "",
       debt: 0,
+      stats: emptyStats(),
     };
+  }
+
+  function emptyStats() {
+    return {
+      aborts: 0,
+      services: {},
+      boughtAt: {},
+      sold: 0,
+      cashBuys: 0,
+      pediaOpens: {},
+      repaid: 0,
+      borrowed: 0,
+      lastDay: "",
+      clean: 0,
+      recentDests: [],
+    };
+  }
+
+  function pilotStats() {
+    if (!state.profile.stats || typeof state.profile.stats !== "object") state.profile.stats = emptyStats();
+    const s = state.profile.stats;
+    s.services = s.services && typeof s.services === "object" ? s.services : {};
+    s.boughtAt = s.boughtAt && typeof s.boughtAt === "object" ? s.boughtAt : {};
+    s.pediaOpens = s.pediaOpens && typeof s.pediaOpens === "object" ? s.pediaOpens : {};
+    return s;
   }
 
   function loadProfile() {
@@ -350,6 +499,12 @@
         tempUnit: raw.tempUnit === "F" ? "F" : "C",
         home: typeof raw.home === "string" ? raw.home : "",
         debt: Number.isFinite(raw.debt) ? Math.max(0, raw.debt) : (raw.loan && Number.isFinite(raw.loan.remaining) ? Math.max(0, raw.loan.remaining) : 0),
+        stats: raw.stats && typeof raw.stats === "object" ? { ...emptyStats(), ...raw.stats } : emptyStats(),
+        serviceOn: raw.serviceOn !== false,
+        clock12: raw.clock12 === true,
+        interestOn: raw.interestOn !== false,
+        lastInterestAt: Number(raw.lastInterestAt) > 0 ? Number(raw.lastInterestAt) : Date.now(),
+        soundOn: raw.soundOn !== false,
       };
       delete out.savings;
       delete out.loan;
@@ -415,6 +570,7 @@
   }
 
   function needsService(id) {
+    if (!state.profile.serviceOn) return false;
     return sinceService(id) >= SERVICE_HRS;
   }
 
@@ -440,10 +596,12 @@
   function loanWithdraw(amt) {
     amt = Math.round(parseMoneyIn(amt) || Number(amt) || 0);
     if (amt <= 0) return "ENTER AMOUNT.";
-    if (!state.profile.moneyOn) return "MONEY AWARDS ARE OFF.";
     if (amt > creditLeft()) return "EXCEEDS AVAILABLE CREDIT.";
     state.profile.debt = (state.profile.debt || 0) + amt;
     state.profile.money += amt;
+    if (!state.profile.lastInterestAt) state.profile.lastInterestAt = Date.now();
+    const st = pilotStats();
+    st.borrowed = (st.borrowed || 0) + amt;
     saveProfile();
     return "";
   }
@@ -451,13 +609,52 @@
   function loanRepay(amt) {
     amt = Math.round(parseMoneyIn(amt) || Number(amt) || 0);
     if (amt <= 0) return "ENTER AMOUNT.";
-    if (!state.profile.moneyOn) return "MONEY AWARDS ARE OFF.";
     amt = Math.min(amt, state.profile.debt || 0, state.profile.money);
     if (amt <= 0) return "NOTHING TO REPAY.";
     state.profile.debt -= amt;
     state.profile.money -= amt;
+    if (state.profile.debt === 0) {
+      state.profile.lastInterestAt = Date.now();
+      pilotStats().repaid = (pilotStats().repaid || 0) + 1;
+    }
     saveProfile();
     return "";
+  }
+
+  const INTEREST_PER_DAY = 0.01;
+  const INTEREST_CATCHUP_DAYS = 7;
+
+  function accrueInterest() {
+    const p = state.profile;
+    if (!p) return 0;
+    const now = Date.now();
+    if (!p.interestOn) {
+      p.lastInterestAt = now;
+      return 0;
+    }
+    const last = Number(p.lastInterestAt) || now;
+    if (!p.lastInterestAt) {
+      p.lastInterestAt = now;
+      return 0;
+    }
+    let days = Math.floor((now - last) / 86400000);
+    if (days < 1) return 0;
+    days = Math.min(days, INTEREST_CATCHUP_DAYS);
+    p.lastInterestAt = last + days * 86400000;
+    if ((p.debt || 0) <= 0) {
+      saveProfile();
+      return 0;
+    }
+    let debt = p.debt;
+    let charge = 0;
+    for (let i = 0; i < days; i++) {
+      const c = Math.max(1, Math.round(debt * INTEREST_PER_DAY));
+      debt += c;
+      charge += c;
+    }
+    p.debt = debt;
+    saveProfile();
+    return charge;
   }
 
   function repairAircraft(id) {
@@ -469,6 +666,8 @@
     if (state.profile.moneyOn) state.profile.money -= cost;
     state.profile.sinceService = state.profile.sinceService || {};
     state.profile.sinceService[id] = 0;
+    const st = pilotStats();
+    st.services[id] = (st.services[id] || 0) + 1;
     saveProfile();
     return "";
   }
@@ -557,12 +756,16 @@
     const price = listPrice(ac);
     if (!state.profile.moneyOn) {
       state.profile.hangar.push(id);
+      pilotStats().boughtAt[id] = new Date().toISOString();
       saveProfile();
       return "";
     }
     if (state.profile.money < price) return "INSUFFICIENT FUNDS.";
     state.profile.money -= price;
     state.profile.hangar.push(id);
+    const st = pilotStats();
+    st.boughtAt[id] = new Date().toISOString();
+    st.cashBuys = (st.cashBuys || 0) + 1;
     saveProfile();
     return "";
   }
@@ -574,6 +777,7 @@
     const proceeds = Math.round(price * 0.7);
     if (state.profile.moneyOn) state.profile.money += Math.max(0, proceeds);
     state.profile.hangar = state.profile.hangar.filter((x) => x !== id);
+    pilotStats().sold = (pilotStats().sold || 0) + 1;
     if (state.ac && state.ac.id === id) {
       const next = AIRCRAFT.find((a) => a.id === state.profile.hangar[0]) || AIRCRAFT[0];
       state.ac = next;
@@ -778,6 +982,13 @@
       candidates.push({ a, d });
     }
 
+    const recent = new Set((pilotStats().recentDests || []).slice(0, 16));
+    const fresh = candidates.filter((c) => !recent.has(c.a.id));
+    if (fresh.length >= Math.max(n, 3)) {
+      candidates.length = 0;
+      candidates.push(...fresh);
+    }
+
     if (candidates.length < 3) {
       // relax paved / min distance a little
       for (const a of airports) {
@@ -827,6 +1038,8 @@
       const alt = cruiseAlt(ac, dist, dep, c.a);
       const money = payout(type, dist, pay, ac);
       const xp = xpFor({ type, dist, pay });
+      const delayMin = 10 + Math.floor(Math.random() * 11);
+      const depMs = Date.now() + delayMin * 60000;
       out.push({
         id: `${Date.now().toString(36)}-${c.a.id}-${out.length}`,
         type,
@@ -845,6 +1058,8 @@
         ac: ac.id,
         acName: ac.name,
         acTail: tailOf(ac.id),
+        depTime: new Date(depMs).toISOString(),
+        arrTime: new Date(depMs + eteMin * 60000).toISOString(),
       });
     }
     return out;
@@ -857,7 +1072,7 @@
       `${(t && t.label) || m.type}  ·  ${icaoOf(m.dep)} ${fieldCaption(m.dep)} → ${icaoOf(m.dest)} ${fieldCaption(m.dest)}  ·  ${m.dist} nm  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
       `Aircraft: ${m.acName}${m.acTail ? "  " + m.acTail : ""}`,
       `Payload: ${m.pay.text}`,
-      `Suggested: ${m.alt.toLocaleString()} ft · ETE ~${fmtEte(m.eteMin)}`,
+      `Suggested: ${m.alt.toLocaleString()} ft · ETE ~${fmtEte(m.eteMin)} · DEP ${fmtTimeOf(m.depTime)} · ARR ${fmtTimeOf(m.arrTime)}`,
       `Dest: ${m.dest.n}${m.dest.c ? " / " + m.dest.c : ""} (${fieldKind(m.dest)}, rwy ${m.dest.rw || "?"} ft)`,
       `Quote: $${m.money.toLocaleString()}  ·  XP: ${m.xp || xpFor(m)}`,
       ``,
@@ -949,6 +1164,8 @@
     else if (wind) {
       const dir = wind[1];
       out.wind = wind[4] ? `${dir}/${wind[2]}G${wind[4]} KT` : `${dir}/${wind[2]} KT`;
+      out.windKt = parseInt(wind[2], 10) || 0;
+      out.gustKt = wind[4] ? parseInt(wind[4], 10) : out.windKt;
     }
     let visSm = null;
     const visP = raw.match(/\b(\d{1,2})(?:\s+(\d\/\d))?SM\b/) || raw.match(/\b(\d\/\d)SM\b/);
@@ -1057,6 +1274,8 @@
         dewC: null,
         qnh: c.pressure_msl != null ? Math.round(c.pressure_msl) + " hPa" : "—",
         cat: flightCat(visSm, cover >= 90 ? 2000 : cover >= 50 ? 4000 : 99999),
+        windKt: c.wind_speed_10m != null ? Math.round(c.wind_speed_10m) : 0,
+        gustKt: c.wind_gusts_10m != null ? Math.round(c.wind_gusts_10m) : 0,
       },
     };
   }
@@ -1182,11 +1401,11 @@
     return `<span class="wx-cat cat-${d.cat}">${d.cat}</span><span>${d.wind}</span><span>${d.vis}</span>`;
   }
 
-  function ttfBits(acId) {
-    if (!acId) return "";
+  function ttsBits(acId) {
+    if (!acId || !state.profile.serviceOn) return "";
     if (needsService(acId)) return `<span class="svc-due">SERVICE DUE</span>`;
     const left = Math.max(0, SERVICE_HRS - sinceService(acId));
-    return `<span>TTF ${left.toFixed(1)} HR</span>`;
+    return `<span>TTS ${left.toFixed(1)} HR</span>`;
   }
 
   function icaoJump(ap) {
@@ -1308,34 +1527,224 @@
     return keys.has(String(ap.id || "").toUpperCase()) || keys.has(String(ap.icao || "").toUpperCase());
   }
 
+  function localDayKey(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    if (Number.isNaN(d.getTime())) return "";
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function localHour(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    return Number.isNaN(d.getTime()) ? -1 : d.getHours();
+  }
+
+  function isWeekend(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    const n = d.getDay();
+    return n === 0 || n === 6;
+  }
+
+  function dayDiff(a, b) {
+    const da = new Date(a + "T12:00:00");
+    const db = new Date(b + "T12:00:00");
+    return Math.round((db - da) / 86400000);
+  }
+
+  function consecutiveDays(flown) {
+    const days = [...new Set(flown.map((m) => localDayKey(m.flownAt)).filter(Boolean))].sort();
+    let best = 0, run = 0, prev = "";
+    days.forEach((d) => {
+      if (prev && dayDiff(prev, d) === 1) run += 1;
+      else run = 1;
+      if (run > best) best = run;
+      prev = d;
+    });
+    return best;
+  }
+
+  function acClassBucket(cls) {
+    if (cls === "helo" || cls === "evtol") return "rotor";
+    if (cls === "turboprop") return "turboprop";
+    if (cls === "jet" || cls === "airliner") return "jet";
+    if (cls === "piston" || cls === "bush" || cls === "vintage" || cls === "airship") return "piston";
+    return "";
+  }
+
+  function wxSnap(ap) {
+    const id = icaoOf(ap);
+    if (!id) return { cat: "", windKt: 0, gustKt: 0 };
+    const hit = wxCache.get(id);
+    const d = hit && hit.obs && hit.obs.dec;
+    if (!d) return { cat: "", windKt: 0, gustKt: 0 };
+    return { cat: d.cat || "", windKt: d.windKt || 0, gustKt: d.gustKt || 0 };
+  }
+
   function badges() {
     const { flown, types, makers } = flownStats();
     const marks = new Set(state.collection.marks || []);
     const stamps = new Set(state.collection.stamps || []);
     const cities = new Set(state.collection.cities || []);
     const ports = new Set(state.collection.ports || []);
-    const today = dayKey();
-    const todayFlights = flown.filter((m) => m.flownAt && m.flownAt.slice(0, 10) === today);
+    const today = localDayKey();
+    const todayFlights = flown.filter((m) => localDayKey(m.flownAt) === today);
+    const hours = flown.reduce((s, m) => s + (m.hours || 0), 0);
+    const earned = flown.reduce((s, m) => s + (m.money || 0), 0);
+    const airline = flown.filter((m) => m.mode === "airline");
+    const home = homeField();
+    const homeId = home ? home.id : "";
+    const fromHome = flown.filter((m) => icaoOf(m.dep) === homeId).length;
+    const toHome = flown.filter((m) => icaoOf(m.dest) === homeId).length;
+    const visits = {};
+    flown.forEach((m) => {
+      [icaoOf(m.dep), icaoOf(m.dest)].forEach((id) => {
+        if (id && id !== "—") visits[id] = (visits[id] || 0) + 1;
+      });
+    });
+    const maxVisit = Object.values(visits).reduce((a, b) => Math.max(a, b), 0);
+    const acIds = new Set(flown.map((m) => m.ac).filter(Boolean));
+    const buckets = new Set(flown.map((m) => acClassBucket((AIRCRAFT.find((a) => a.id === m.ac) || {}).cls)));
+    buckets.delete("");
+    const maxAirHrs = Math.max(0, ...Object.values(state.profile.hours || {}));
+    const cats = new Set(flown.map((m) => m.wxCat || m.arrCat).filter((c) => c && c !== "—"));
+    const mvfrPlus = flown.filter((m) => ["MVFR", "IFR", "LIFR"].includes(m.wxCat || m.arrCat)).length;
+    const windy = flown.some((m) => (m.windKt || 0) >= 20);
+    const bushN = flown.filter((m) => m.type === "bush").length;
+    const vintageN = flown.filter((m) => {
+      const ac = AIRCRAFT.find((a) => a.id === m.ac);
+      return ac && ac.cls === "vintage";
+    }).length;
+    const shortStrip = flown.some((m) => m.dest && m.dest.rw && m.dest.rw > 0 && m.dest.rw < 2500);
+    const farHome = home && flown.some((m) => m.dest && haversineNm(home, m.dest) >= 500);
+    const weekendN = flown.filter((m) => m.flownAt && isWeekend(m.flownAt)).length;
+    const early = flown.some((m) => { const h = localHour(m.flownAt); return h >= 0 && h < 7; });
+    const late = flown.some((m) => localHour(m.flownAt) >= 22);
+    const streak = consecutiveDays(flown);
+    const st = pilotStats();
+    const maxSvc = Math.max(0, ...Object.values(st.services || { 0: 0 }));
+    const lic = licenseFor(state.profile.xp);
+    const postcards = cities.size + ports.size;
+    const collectables = marks.size + cities.size + ports.size;
+    const needAll = LANDMARKS.length + CITIES.length + PORTS.length;
+    const albumDone = (CITIES.length && cities.size >= CITIES.length) || (PORTS.length && ports.size >= PORTS.length) || (LANDMARKS.length && marks.size >= LANDMARKS.length);
+    const airlineDest = new Set(airline.map((m) => icaoOf(m.dest)).filter((x) => x && x !== "—"));
+    const airlineAc = new Set(airline.map((m) => m.ac).filter(Boolean));
+    const airlineFromHome = airline.filter((m) => icaoOf(m.dep) === homeId).length;
+    const scenic = marks.size >= 1;
+    const lied = flown.some((m) => m.depCat === "VFR" && (m.arrCat === "IFR" || m.arrCat === "LIFR"));
+    const pediaMax = Math.max(0, ...Object.values(st.pediaOpens || { 0: 0 }));
+    const hangarQueen = Object.entries(st.boughtAt || {}).some(([id, iso]) => {
+      if (!inHangar(id)) return false;
+      if ((state.profile.hours && state.profile.hours[id]) > 0) return false;
+      const t = new Date(iso).getTime();
+      return Number.isFinite(t) && Date.now() - t >= 24 * 3600 * 1000;
+    });
+    const fresh = flown.some((m) => {
+      const bought = st.boughtAt && st.boughtAt[m.ac];
+      if (!bought || !m.flownAt) return false;
+      return new Date(m.flownAt).getTime() >= new Date(bought).getTime();
+    }) && Object.keys(st.boughtAt || {}).length > 0;
+    const unpaved = flown.filter((m) => m.dest && !m.dest.pv).length;
+    const high = flown.filter((m) => (m.dest && m.dest.el || 0) >= 5000).length;
+    const longLeg = flown.filter((m) => (m.dist || 0) >= 300).length;
+    const veryLong = flown.some((m) => (m.dist || 0) >= 800);
+
+    const row = (id, cat, label, info, cur, max, hidden) => {
+      const n = Number(cur) || 0;
+      const m = max == null ? 1 : max;
+      const have = n >= m;
+      return { id, cat, label, info, cur: Math.min(n, m), max: m, have, hidden: !!hidden };
+    };
+
     const list = [
-      { id: "first", have: flown.length >= 1, label: "FIRST SORTIE", info: "Complete and log one accepted tasking." },
-      { id: "five", have: flown.length >= 5, label: "5 SORTIES", info: "Log five completed taskings." },
-      { id: "twenty", have: flown.length >= 20, label: "20 SORTIES", info: "Log twenty completed taskings." },
-      { id: "fields10", have: stamps.size >= 10, label: "10 AIRFIELDS", info: "Depart or arrive at ten distinct airfields." },
-      { id: "fields25", have: stamps.size >= 25, label: "25 AIRFIELDS", info: "Depart or arrive at twenty-five distinct airfields." },
-      { id: "long", have: flown.some((m) => m.dist >= 300), label: "300 NM LEG", info: "Complete one tasking of 300 nautical miles or more." },
-      { id: "high", have: flown.some((m) => (m.dest?.el || 0) >= 5000), label: "HIGH ELEVATION", info: "Land at a destination 5,000 feet MSL or higher." },
-      { id: "soft", have: flown.some((m) => m.dest && !m.dest.pv), label: "UNPAVED DEST", info: "Complete a tasking to an unpaved destination." },
-      { id: "types", have: types.size >= 5, label: "FIVE CATEGORIES", info: "Log at least one sortie in five different task categories." },
-      { id: "multi", have: makers.size >= 5, label: "FIVE MANUFACTURERS", info: "Complete sorties in aircraft from five manufacturers." },
-      { id: "busy", have: todayFlights.length >= 3, label: "THREE THIS DATE", info: "Log three completed sorties on the same calendar date." },
-      { id: "lm5", have: marks.size >= 5, label: "5 LANDMARKS", info: "Complete a sortie within 20 NM of five landmarks." },
-      { id: "lm25", have: marks.size >= 25, label: "25 LANDMARKS", info: "Complete sorties within 20 NM of twenty-five landmarks." },
-      { id: "city5", have: cities.size >= 5, label: "5 CITIES", info: "Complete a sortie within 30 NM of five listed cities." },
-      { id: "city20", have: cities.size >= CITIES.length, label: `${CITIES.length} CITIES`, info: `Complete sorties within 30 NM of all ${CITIES.length} listed cities.` },
-      { id: "ap5", have: ports.size >= 5, label: "5 AIRPORTS", info: "Complete a sortie at five listed airports." },
-      { id: "apall", have: ports.size >= PORTS.length && PORTS.length > 0, label: "AIRPORT SET", info: "Complete a sortie at every listed airport postcard field." },
+      row("first", "PILOT", "FIRST SORTIE", "Complete and log one accepted tasking.", flown.length, 1),
+      row("five", "PILOT", "GETTING OFF THE GROUND", "Complete five taskings.", flown.length, 5),
+      row("twentyfive", "PILOT", "REGULAR FLYER", "Complete twenty-five taskings.", flown.length, 25),
+      row("hundred", "PILOT", "SEASONED PILOT", "Complete one hundred taskings.", flown.length, 100),
+      row("hours10", "PILOT", "CLOCKING HOURS", "Log ten flight hours.", hours, 10),
+      row("hours50", "PILOT", "BUILDING TIME", "Log fifty flight hours.", hours, 50),
+      row("hours100", "PILOT", "EXPERIENCED PILOT", "Log one hundred flight hours.", hours, 100),
+      row("busy", "PILOT", "THREE THIS DATE", "Log three completed sorties on the same calendar date.", todayFlights.length, 3),
+      row("session", "PILOT", "JUST ONE MORE", "Complete five taskings in this session.", sessionFlights, 5),
+      row("early", "PILOT", "EARLY BIRD", "Complete a tasking before 07:00 local.", early ? 1 : 0, 1),
+      row("night", "PILOT", "NIGHT OWL", "Complete a tasking at or after 22:00 local.", late ? 1 : 0, 1),
+      row("weekend", "PILOT", "WEEKEND WARRIOR", "Complete ten taskings on a Saturday or Sunday.", weekendN, 10),
+      row("streak", "PILOT", "SEVEN IN A ROW", "Complete taskings on seven consecutive local days.", streak, 7),
+      row("home", "PILOT", "HOME AGAIN", "Complete a tasking that lands at your home field.", toHome, 1),
+      row("fromhome", "PILOT", "NO PLACE LIKE HOME", "Complete twenty-five taskings from your home field.", fromHome, 25),
+
+      row("priv", "CERTIFICATE", "PRIVATE PILOT", "Reach the Private Pilot certificate.", lic.n >= 2 ? 1 : 0, 1),
+      row("comm", "CERTIFICATE", "COMMERCIAL PILOT", "Reach the Commercial Pilot certificate.", lic.n >= 3 ? 1 : 0, 1),
+      row("atp", "CERTIFICATE", "AIRLINE TRANSPORT PILOT", "Reach ATP.", lic.n >= 4 ? 1 : 0, 1),
+
+      row("pay", "CAREER", "FIRST PAYCHECK", "Earn $10,000 from completed taskings.", earned, 10000),
+      row("living", "CAREER", "MAKING A LIVING", "Earn $100,000 from completed taskings.", earned, 100000),
+      row("bank", "CAREER", "SIX FIGURES", "Hold $100,000 on the pilot file.", state.profile.money || 0, 100000),
+      row("fleet5", "CAREER", "FLEET OWNER", "Own five aircraft in the hangar.", (state.profile.hangar || []).length, 5),
+      row("hangar10", "CAREER", "FULL HANGAR", "Fill the hangar (10/10).", (state.profile.hangar || []).length, 10),
+      row("debtfree", "CAREER", "DEBT FREE", "Repay a loan down to zero.", st.repaid || 0, 1),
+      row("cash", "CAREER", "NO BANK NEEDED", "Buy an aircraft with cash on the file.", st.cashBuys || 0, 1),
+      row("dealer", "CAREER", "USED AIRCRAFT DEALER", "Sell an aircraft from the hangar.", st.sold || 0, 1),
+      row("fleet100", "CAREER", "KEEP THE FLEET FLYING", "Accumulate 100 hours across owned airframes.", hours, 100),
+
+      row("cats", "AIRFRAME", "FIVE CATEGORIES", "Log at least one sortie in five task categories.", types.size, 5),
+      row("makers", "AIRFRAME", "FIVE MANUFACTURERS", "Complete sorties in aircraft from five manufacturers.", makers.size, 5),
+      row("jack", "AIRFRAME", "JACK OF ALL TRADES", "Fly piston, rotor, turboprop, and jet.", buckets.size, 4),
+      row("variety", "AIRFRAME", "VARIETY", "Complete flights in ten different types.", acIds.size, 10),
+      row("faithful", "AIRFRAME", "OLD FAITHFUL", "Put 100 hours on one airframe.", maxAirHrs, 100),
+      row("fresh", "AIRFRAME", "FRESH OUT OF THE HANGAR", "Complete a tasking in an aircraft you bought.", fresh ? 1 : 0, 1),
+      row("mechanic", "AIRFRAME", "MECHANIC’S FAVORITE", "Service the same airframe three times.", maxSvc, 3),
+
+      row("pc1", "EXPLORATION", "POSTCARD COLLECTOR", "Unlock your first postcard.", postcards, 1),
+      row("pc10", "EXPLORATION", "WISH YOU WERE HERE", "Unlock ten postcards.", postcards, 10),
+      row("pc25", "EXPLORATION", "TRAVELING PILOT", "Unlock twenty-five postcards.", postcards, 25),
+      row("fields10", "EXPLORATION", "LOCAL EXPLORER", "Visit ten different airfields.", stamps.size, 10),
+      row("fields25", "EXPLORATION", "AIRPORT HOPPER", "Visit twenty-five different airfields.", stamps.size, 25),
+      row("fields50", "EXPLORATION", "WORLD TRAVELER", "Visit fifty different airfields.", stamps.size, 50),
+      row("lm1", "EXPLORATION", "LANDMARK HUNTER", "Discover your first landmark.", marks.size, 1),
+      row("lm10", "EXPLORATION", "SIGHTSEER", "Discover ten landmarks.", marks.size, 10),
+      row("lm25", "EXPLORATION", "TOURIST WITH WINGS", "Discover twenty-five landmarks.", marks.size, 25),
+      row("album", "EXPLORATION", "COLLECTOR", "Complete one postcard or landmark album.", albumDone ? 1 : 0, 1),
+      row("whole", "EXPLORATION", "THE WHOLE ALBUM", "Complete every currently available collectable.", collectables, needAll),
+
+      row("vfr", "WEATHER", "CLEAR SKIES", "Complete a flight in VFR.", cats.has("VFR") ? 1 : 0, 1),
+      row("mvfr", "WEATHER", "GETTING CLOUDY", "Complete a flight in MVFR.", cats.has("MVFR") ? 1 : 0, 1),
+      row("ifr", "WEATHER", "INSTRUMENT RATED", "Complete a flight in IFR.", cats.has("IFR") ? 1 : 0, 1),
+      row("lifr", "WEATHER", "INTO THE SOUP", "Complete a flight in LIFR.", cats.has("LIFR") ? 1 : 0, 1),
+      row("wxset", "WEATHER", "WEATHER WATCHER", "Complete flights in VFR, MVFR, IFR, and LIFR.", cats.size, 4),
+      row("wx10", "WEATHER", "WEATHER DOESN’T CARE", "Complete ten flights in MVFR or worse.", mvfrPlus, 10),
+      row("cross", "WEATHER", "CROSSWIND", "Complete a flight with reported wind of 20 knots or more.", windy ? 1 : 0, 1),
+
+      row("fo", "AIRLINE", "FIRST OFFICER", "Complete your first Airline Mode tasking.", airline.length, 1),
+      row("rev10", "AIRLINE", "REVENUE SERVICE", "Complete ten airline flights.", airline.length, 10),
+      row("rev50", "AIRLINE", "SCHEDULED SERVICE", "Complete fifty airline flights.", airline.length, 50),
+      row("alhome", "AIRLINE", "HOME BASE", "Complete twenty-five airline flights from your home field.", airlineFromHome, 25),
+      row("routes", "AIRLINE", "ROUTE NETWORK", "Fly to twenty-five different destinations in Airline Mode.", airlineDest.size, 25),
+      row("alfleet", "AIRLINE", "FLEET IN SERVICE", "Complete airline taskings in five different aircraft.", airlineAc.size, 5),
+
+      row("bush10", "BUSH", "BUSH PILOT", "Complete ten field-resupply taskings.", bushN, 10),
+      row("soft", "BUSH", "UNPAVED DEST", "Complete a tasking to an unpaved destination.", unpaved, 1),
+      row("high", "BUSH", "HIGH ELEVATION", "Land at a destination 5,000 feet MSL or higher.", high, 1),
+      row("short", "BUSH", "NO RUNWAY REQUIRED", "Complete a tasking to a strip under 2,500 feet.", shortStrip ? 1 : 0, 1),
+      row("vintage", "BUSH", "VINTAGE WINGS", "Complete a tasking in a vintage aircraft.", vintageN, 1),
+      row("long", "BUSH", "300 NM LEG", "Complete one tasking of 300 nautical miles or more.", longLeg, 1),
+      row("far", "BUSH", "LONG WAY HOME", "Complete a tasking more than 500 NM from your home field.", farHome ? 1 : 0, 1),
+
+      row("abort1", "TWOFY", "ABORT MISSION", "Abort a tasking. It happens.", st.aborts || 0, 1),
+      row("clean10", "TWOFY", "PAPERWORK COMPLETE", "Complete ten taskings in a row without aborting.", st.clean || 0, 10),
+      row("legend", "TWOFY", "LOCAL LEGEND", "Use the same airfield twenty-five times.", maxVisit, 25),
+      row("empty", "TWOFY", "EMPTY LEGS", "Finish a sortie with less than five hours to service.", flown.some((m) => m.ttfLeft != null && m.ttfLeft < 5) ? 1 : 0, 1),
+
+      row("lied", "HIDDEN", "THE FORECAST LIED", "Depart VFR and arrive IFR or LIFR.", lied ? 1 : 0, 1, true),
+      row("scenic", "HIDDEN", "THE SCENIC ROUTE", "Complete a flight that unlocks a landmark.", scenic ? 1 : 0, 1, true),
+      row("abort3", "HIDDEN", "FREQUENT MISTAKE", "Abort three taskings.", st.aborts || 0, 3, true),
+      row("pedia10", "HIDDEN", "JUST CHECKING", "Open the same encyclopedia page ten times.", pediaMax, 10, true),
+      row("queen", "HIDDEN", "HANGAR QUEEN", "Own an aircraft for a day without flying it.", hangarQueen ? 1 : 0, 1, true),
+      row("know", "HIDDEN", "I KNOW THIS AIRPORT", "Visit the same airfield ten times.", maxVisit, 10, true),
+      row("verylong", "HIDDEN", "ARE WE THERE YET?", "Complete a tasking of 800 NM or more.", veryLong ? 1 : 0, 1, true),
     ];
-    return { list, title: rankFor(totalXp()).name };
+
+    const have = list.filter((b) => b.have).length;
+    return { list, title: rankFor(totalXp()).name, have, total: list.length };
   }
 
   function openConfirm(kind) {
@@ -1372,15 +1781,23 @@
     const acId = m.ac || (state.ac && state.ac.id);
     if (acId && needsService(acId)) return;
     setActive({ ...m, acceptedAt: new Date().toISOString(), mode: m.mode || state.mode });
+    setMissions((state.missions || []).filter((x) => x.id !== m.id));
+    sfx("accept");
     renderActive();
     renderMissions();
     if (m.dest) loadWx(m.dest, false, "arr");
   }
 
   function abortMission() {
+    const st = pilotStats();
+    st.aborts = (st.aborts || 0) + 1;
+    st.clean = 0;
+    saveProfile();
+    sfx("abort");
     setActive(null);
     renderActive();
     renderMissions();
+    renderRank();
     if (state.missions[0] && state.missions[0].dest) loadWx(state.missions[0].dest, false, "arr");
     else loadWx(null, false, "arr");
   }
@@ -1388,12 +1805,28 @@
   function completeMission() {
     if (!state.active) return;
     const m = state.active;
+    let beforeHave = [];
+    try { beforeHave = badges().list.filter((b) => b.have).map((b) => b.id); } catch (e) {}
     const before = {
       marks: new Set(state.collection.marks || []),
       cities: new Set(state.collection.cities || []),
       ports: new Set(state.collection.ports || []),
     };
-    markFlown(m);
+    const now = Date.now();
+    const bonus = earlyBonus(m, now);
+    try {
+      markFlown(m, bonus);
+    } catch (err) {
+      console.error(err);
+    }
+    const destId = icaoOf(m.dest);
+    if (destId && destId !== "----") {
+      const st = pilotStats();
+      const list = Array.isArray(st.recentDests) ? st.recentDests.slice() : [];
+      list.unshift(destId);
+      st.recentDests = [...new Set(list)].slice(0, 16);
+      saveProfile();
+    }
     setActive(null);
     renderActive();
     renderMissions();
@@ -1401,12 +1834,65 @@
     const afterMarks = new Set(state.collection.marks || []);
     const afterPorts = new Set(state.collection.ports || []);
     const afterCities = new Set(state.collection.cities || []);
-    const newLm = [...afterMarks].find((id) => !before.marks.has(id));
-    const newAp = [...afterPorts].find((id) => !before.ports.has(id));
-    const newCy = [...afterCities].find((id) => !before.cities.has(id));
-    if (newLm) openPedia("lm", newLm);
-    else if (newAp) openPedia("ap", newAp);
-    else if (newCy) openPedia("cy", newCy);
+    const unlocked = [];
+    afterMarks.forEach((id) => { if (!before.marks.has(id)) unlocked.push({ kind: "lm", id, name: (LANDMARKS.find((x) => x.id === id) || {}).n || id }); });
+    afterCities.forEach((id) => { if (!before.cities.has(id)) unlocked.push({ kind: "cy", id, name: (CITIES.find((x) => x.id === id) || {}).n || id }); });
+    afterPorts.forEach((id) => { if (!before.ports.has(id)) unlocked.push({ kind: "ap", id, name: (PORTS.find((x) => x.id === id) || {}).n || id }); });
+    let newAch = [];
+    try {
+      const afterHave = badges().list.filter((b) => b.have);
+      newAch = afterHave.filter((b) => !beforeHave.includes(b.id));
+    } catch (e) {}
+    showDebrief({
+      m,
+      bonus,
+      unlocked,
+      newAch,
+    });
+  }
+
+  function earlyBonus(m, now) {
+    if (!m || !m.arrTime) return 0;
+    const arr = new Date(m.arrTime).getTime();
+    if (!Number.isFinite(arr)) return 0;
+    const earlyMin = (arr - now) / 60000;
+    if (earlyMin < 5) return 0;
+    const fromTime = Math.round(earlyMin * 15);
+    const cap = Math.round((m.money || 0) * 0.15);
+    return Math.max(0, Math.min(fromTime, cap || fromTime));
+  }
+
+  function showDebrief(info) {
+    const box = $("#debrief");
+    const body = $("#debrief-body");
+    if (!box || !body) return;
+    const m = info.m || {};
+    const pay = m.money || 0;
+    const xp = m.xp || xpFor(m);
+    const bonus = info.bonus || 0;
+    const arr = m.arrTime ? new Date(m.arrTime).getTime() : 0;
+    const timing = !arr ? "" : (Date.now() < arr - 5 * 60000 ? "EARLY" : Date.now() <= arr + 15 * 60000 ? "ON TIME" : "LATE");
+    const unlocks = (info.unlocked || []).map((u) => {
+      const kind = u.kind === "lm" ? "LANDMARK" : u.kind === "cy" ? "CITY POSTCARD" : "AIRPORT POSTCARD";
+      return `<li><b>${kind}</b> ${esc(u.name || u.id)}</li>`;
+    }).join("");
+    const ach = (info.newAch || []).filter((b) => !b.hidden || b.have).map((b) => `<li><b>${esc(b.label)}</b> ${esc(b.info)}</li>`).join("");
+    body.innerHTML = `
+      <h2>${esc(icaoOf(m.dep))} → ${esc(icaoOf(m.dest))}</h2>
+      <p class="muted">${esc(fieldCaption(m.dep))} → ${esc(fieldCaption(m.dest))}${timing ? " · " + timing : ""}</p>
+      <div class="wx-grid debrief-grid">
+        <div><span>PAY</span><b>${moneyFmt(pay)}</b></div>
+        ${bonus ? `<div><span>EARLY BONUS</span><b>${moneyFmt(bonus)}</b></div>` : ""}
+        <div><span>XP</span><b>+${xp}</b></div>
+      </div>
+      ${unlocks ? `<p class="pedia-kicker">COLLECTABLES</p><ul class="debrief-list">${unlocks}</ul>` : ""}
+      ${ach ? `<p class="pedia-kicker">ACHIEVEMENTS</p><ul class="debrief-list">${ach}</ul>` : `<p class="muted">No new achievements this sortie.</p>`}
+      <p class="muted">Departure was a suggestion. You can complete whenever the flight is done.</p>
+    `;
+    box.hidden = false;
+    sfx("complete");
+    if (info.unlocked && info.unlocked.length) setTimeout(() => sfx("stamp"), 280);
+    if (info.newAch && info.newAch.length) setTimeout(() => sfx("ach"), 520);
   }
 
   function wikiTitle(kind, id) {
@@ -1513,6 +1999,7 @@
     const held = heldStamp(kind, id);
     const title = wikiTitle(kind, id);
     box.hidden = false;
+    sfx(held ? "stamp" : "click");
     if (!held) {
       body.innerHTML = `
         <p class="pedia-kicker">ENCYCLOPEDIA</p>
@@ -1521,12 +2008,16 @@
       return;
     }
     const page = await fetchPedia(kind, id);
+    const st = pilotStats();
+    const key = kind + ":" + id;
+    st.pediaOpens[key] = (st.pediaOpens[key] || 0) + 1;
+    saveProfile();
     const art = stampSrc(kind, id);
     body.innerHTML = `
       <p class="pedia-kicker">ENCYCLOPEDIA</p>
       <h2>${page.title}</h2>
       <figure class="pedia-plate${kind === "cy" || kind === "ap" ? " card" : ""}">
-        <img src="${art}" alt="${page.title}" onerror="this.parentNode.style.display='none'" />
+        <img src="${art}" alt="${page.title}" onerror="if(!this.dataset.fb){this.dataset.fb=1;this.src=this.src.replace(/\\.jpg$/i,'.png')}else{this.parentNode.style.display='none'}" />
       </figure>
       ${kind === "cc" && page.capital ? `<p class="pedia-meta"><b>CAPITAL</b> ${page.capital}</p>` : ""}
       ${kind === "cc" && page.pop ? `<p class="pedia-meta"><b>POPULATION</b> ${page.pop}</p>` : ""}
@@ -1540,6 +2031,10 @@
   function stampSrc(kind, id) {
     const folder = kind === "st" ? "states" : kind === "cc" ? "countries" : kind === "cy" ? "cities" : kind === "ap" ? "airports" : "landmarks";
     let file = String(id || "");
+    if (kind === "ap") {
+      const pt = PORTS.find((x) => x.id === id || x.icao === id);
+      file = (pt && (pt.icao || pt.id)) || id;
+    }
     if (kind === "st" || kind === "cc" || kind === "ap") file = file.toUpperCase();
     return `stamps/${folder}/${file}.jpg`;
   }
@@ -1580,43 +2075,59 @@
           <span>${m.dist} nm</span>
           <span>hdg ${String(m.hdg).padStart(3, "0")}°</span>
           <span>ETE ${fmtEte(m.eteMin)}</span>
+          <span>DEP ${fmtTimeOf(m.depTime)}</span>
+          <span>ARR ${fmtTimeOf(m.arrTime)}</span>
           <span>${m.acName}${m.acTail ? " · " + m.acTail : ""}</span>
           <span>${m.pay.text}</span>
-          ${ttfBits(m.ac)}
           ${destWxBits(m.dest)}
         </div>
         <p class="brief">${m.brief}</p>
         <footer class="job-foot">
-          <button class="primary tiny" id="complete-msn">COMPLETE</button>
+          <button class="primary tiny" id="complete-msn" title="Complete whenever the flight is done. You do not have to wait for the scheduled arrival.">COMPLETE</button>
           <button class="ghost" id="abort-msn">ABORT</button>
         </footer>
       </article>`;
-    $("#complete-msn").addEventListener("click", () => openConfirm("complete"));
+    $("#complete-msn").addEventListener("click", () => completeMission());
     $("#abort-msn").addEventListener("click", () => openConfirm("abort"));
     if (m.dest) loadWx(m.dest, false, "arr");
   }
 
-  function markFlown(m) {
+  function markFlown(m, bonus) {
+    const now = new Date();
+    const depWx = wxSnap(m.dep);
+    const arrWx = wxSnap(m.dest);
+    const acId = m.ac || (state.ac && state.ac.id);
+    const ttfLeft = acId ? Math.max(0, SERVICE_HRS - sinceService(acId) - Math.round((m.eteMin / 60) * 10) / 10) : 99;
+    const pay = (m.money || 0) + (bonus || 0);
     const entry = {
       ...m,
       flown: true,
-      flownAt: new Date().toISOString(),
+      flownAt: now.toISOString(),
       hours: Math.round((m.eteMin / 60) * 10) / 10,
       xp: m.xp || xpFor(m),
-      money: m.money || 0,
+      money: pay,
+      bonus: bonus || 0,
+      wxCat: arrWx.cat || depWx.cat || "",
+      depCat: depWx.cat || "",
+      arrCat: arrWx.cat || "",
+      windKt: Math.max(arrWx.windKt || 0, depWx.windKt || 0, arrWx.gustKt || 0, depWx.gustKt || 0),
+      ttfLeft,
+      acId,
     };
     const i = state.log.findIndex((x) => x.id === m.id);
     if (i >= 0) state.log[i] = { ...state.log[i], ...entry };
     else state.log.unshift(entry);
     state.profile.xp += entry.xp;
-    if (state.profile.moneyOn) state.profile.money += entry.money;
-    const acId = m.ac || (state.ac && state.ac.id);
+    state.profile.money += entry.money;
     if (acId) {
       state.profile.hours = state.profile.hours || {};
       state.profile.sinceService = state.profile.sinceService || {};
       state.profile.hours[acId] = Math.round(((state.profile.hours[acId] || 0) + entry.hours) * 10) / 10;
       state.profile.sinceService[acId] = Math.round(((state.profile.sinceService[acId] || 0) + entry.hours) * 10) / 10;
     }
+    const st = pilotStats();
+    st.clean = (st.clean || 0) + 1;
+    sessionFlights += 1;
     saveProfile();
     saveLog();
     mergeUnlocks(unlocksFromFlown([entry]));
@@ -1637,6 +2148,7 @@
     state.ac = ac;
     state.acMaker = ac.maker;
     try { localStorage.setItem("twofly-ac", ac.id); } catch {}
+    sfx("select");
     fillTypeSelect();
     syncMakerSelect();
     renderAcMeta();
@@ -1808,10 +2320,11 @@
             <span>${m.dist} nm</span>
             <span>hdg ${String(m.hdg).padStart(3, "0")}°</span>
             <span>ETE ${fmtEte(m.eteMin)}</span>
+            <span>DEP ${fmtTimeOf(m.depTime)}</span>
+            <span>ARR ${fmtTimeOf(m.arrTime)}</span>
             <span>${m.alt.toLocaleString()} ft</span>
             <span>${m.pay.text}</span>
             ${m.acTail ? `<span>${m.acTail}</span>` : ""}
-            ${ttfBits(m.ac)}
             ${destWxBits(m.dest)}
           </div>
           <p class="brief">${m.brief}</p>
@@ -1836,7 +2349,7 @@
         ${p.showAirline && p.airline ? `<span class="chip-line">${p.airline}</span>` : ""}
         <span>RANK ${lic.n} · ${lic.name}</span>
         <span>${lic.next ? `${p.xp} / ${lic.next.xp} → ${lic.next.name}` : `${p.xp} XP`}</span>
-        ${p.moneyOn ? `<div class="chip-cash">${moneyFmt(p.money)}</div>` : ""}
+        <div class="chip-cash">${moneyFmt(p.money)}</div>
       </div>
     `;
   }
@@ -1893,9 +2406,7 @@
     const loanEl = $("#loan-panel");
     const p = state.profile;
     if (loanEl) {
-      if (!p.moneyOn) {
-        loanEl.innerHTML = `<label>CREDIT</label><p class="muted">MONEY AWARDS ARE OFF.</p>`;
-      } else {
+      {
         const debt = p.debt || 0;
         const left = creditLeft();
         loanEl.innerHTML = `
@@ -1903,6 +2414,7 @@
         <div class="wx-grid">
           <div><span>LOAN AVAILABLE</span><b>${moneyFmt(left)}</b></div>
           <div><span>DEBT</span><b>${moneyFmt(debt)}</b></div>
+          ${p.interestOn ? `<div><span>INTEREST</span><b>1% / DAY</b></div>` : `<div><span>INTEREST</span><b>OFF</b></div>`}
         </div>
         <div class="row">
           <div>
@@ -1923,8 +2435,10 @@
           if (msg) {
             errEl.hidden = false;
             errEl.textContent = msg;
+            sfx("error");
             return;
           }
+          sfx("money");
           renderHangar();
           renderPilotChip();
           renderAirline();
@@ -1945,7 +2459,7 @@
         <div class="fleet-row">
           <div>
             <b>${a.name}</b>
-            <span class="muted">${a.maker} · ${hrs.toFixed(1)} HR · TTF ${Math.max(0, SERVICE_HRS - wear).toFixed(1)} HR${due ? " · SERVICE DUE" : ""}</span>
+            <span class="muted">${a.maker} · ${hrs.toFixed(1)} HR${p.serviceOn ? ` · TTS ${Math.max(0, SERVICE_HRS - wear).toFixed(1)} HR` : ""}${due ? " · SERVICE DUE" : ""}</span>
             <label class="tail-lab">TAIL
               <input class="tail-in" data-tail="${a.id}" type="text" maxlength="10" value="${tailOf(a.id)}" placeholder="N-NUMBER" autocomplete="off" spellcheck="false" />
             </label>
@@ -1996,10 +2510,18 @@
   function renderSettings() {
     const money = $("#set-money");
     const locks = $("#set-locks");
+    const svc = $("#set-service");
+    const interest = $("#set-interest");
+    const sound = $("#set-sound");
+    const clock = $("#set-clock");
     const ccyEl = $("#set-ccy");
     const tempEl = $("#set-temp");
     if (money) money.checked = !!state.profile.moneyOn;
     if (locks) locks.checked = !!state.profile.locksOn;
+    if (svc) svc.checked = state.profile.serviceOn !== false;
+    if (interest) interest.checked = state.profile.interestOn !== false;
+    if (sound) sound.checked = state.profile.soundOn !== false;
+    if (clock) clock.value = state.profile.clock12 ? "12" : "24";
     if (ccyEl) {
       if (!ccyEl.options.length) {
         ccyEl.innerHTML = CURRENCIES.map(
@@ -2013,29 +2535,65 @@
   }
 
   function renderRank() {
-    const { title, list } = badges();
+    const { title, list, have, total } = badges();
     const rank = $("#rankline");
     if (rank) rank.textContent = title;
-    const badgesEl = $("#badges");
-    if (badgesEl) {
-      badgesEl.innerHTML = list
-        .map((b) => `<span class="badge${b.have ? " have" : ""}">${b.label}<i class="tip">${b.info}</i></span>`)
-        .join("");
-    }
+    const count = $("#ach-count");
+    if (count) count.textContent = `${have} / ${total}`;
     const book = $("#badges-book");
     if (book) {
-      book.innerHTML = list
-        .map((b) => `<span class="badge${b.have ? " have" : ""}">${b.label}<i class="tip">${b.info}</i></span>`)
-        .join("");
+      const cats = [];
+      list.forEach((b) => {
+        if (!cats.includes(b.cat)) cats.push(b.cat);
+      });
+      book.innerHTML = cats.map((cat) => {
+        const rows = list.filter((b) => b.cat === cat);
+        return `<div class="ach-cat">
+          <h4>${cat === "HIDDEN" ? "UNLOGGED" : cat}</h4>
+          ${rows.map((b) => {
+            const locked = b.hidden && !b.have;
+            const name = locked ? "????" : b.label;
+            const info = locked ? "Hidden. Keep flying." : b.info;
+            const prog = locked ? "" : `<em>${b.max <= 1 && b.have ? "DONE" : b.cur + " / " + b.max}</em>`;
+            return `<div class="ach-row${b.have ? " have" : ""}${locked ? " hid" : ""}">
+              <div><b>${name}</b><span>${info}</span></div>
+              ${prog}
+            </div>`;
+          }).join("")}
+        </div>`;
+      }).join("");
     }
+  }
+
+  function fmtTimeOf(iso) {
+    if (!iso) return "—";
+    const d = iso instanceof Date ? iso : new Date(iso);
+    if (Number.isNaN(d.getTime())) return "—";
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    if (state.profile && state.profile.clock12) {
+      const h = d.getHours();
+      const h12 = h % 12 || 12;
+      return `${h12}:${mm}${h < 12 ? "AM" : "PM"}`;
+    }
+    return `${String(d.getHours()).padStart(2, "0")}:${mm}`;
+  }
+
+  function fmtClock(d) {
+    if (!d || Number.isNaN(d.getTime())) return "";
+    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+    return `${d.getDate()} ${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)} · ${fmtTimeOf(d)}`;
+  }
+
+  function tickClock() {
+    const el = $("#desk-clock");
+    if (el) el.textContent = fmtClock(new Date());
   }
 
   function fmtDate(iso) {
     if (!iso) return "";
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
-    const months = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
-    return `${d.getDate()} ${months[d.getMonth()]} ${String(d.getFullYear()).slice(2)}`;
+    return fmtClock(d);
   }
 
   function renderLog() {
@@ -2160,6 +2718,7 @@
   }
 
   function bind() {
+    document.addEventListener("pointerdown", () => ensureAudio(), { once: true });
     $("#ac-search")?.addEventListener("input", (e) => {
       state.acQuery = e.target.value;
       renderAircraft();
@@ -2169,6 +2728,7 @@
       const btn = e.target.closest("[data-filter]");
       if (!btn) return;
       state.acFilter = btn.dataset.filter;
+      sfx("click");
       $$("#ac-filters [data-filter]").forEach((b) => b.classList.toggle("on", b === btn));
       renderAircraft();
       renderAcMeta();
@@ -2305,12 +2865,14 @@
         setMissions([]);
         renderMissions();
         $("#missions").innerHTML = `<div class="empty">SERVICE DUE ON THIS AIRCRAFT. REPAIR IN HANGAR.</div>`;
+        sfx("error");
         return;
       }
       const list = generate();
       list.forEach((m) => { m.mode = state.mode; });
       setMissions(list);
       renderMissions();
+      sfx(list.length ? "issue" : "error");
       fillDestWx(state.missions);
       if (!state.missions.length) {
         $("#missions").innerHTML = `<div class="empty">NO VALID TASKING FOR THIS COMBINATION. ADJUST LEG LENGTH, SURFACE CONSTRAINT, OR AIRFIELD.</div>`;
@@ -2321,6 +2883,7 @@
       const btn = e.target.closest("[data-n]");
       if (!btn) return;
       state.issueN = Number(btn.dataset.n) || 5;
+      sfx("click");
       const n = state.issueN;
       const go = $("#go");
       if (go) go.textContent = n === 1 ? "ISSUE 1 TASKING" : `ISSUE ${n} TASKINGS`;
@@ -2368,12 +2931,6 @@
       const body = document.querySelector(`[data-fold-body="${id}"]`);
       if (body) body.classList.toggle("folded");
     });
-    $("#ach-toggle")?.addEventListener("click", () => {
-      const box = $("#badges-book");
-      if (!box) return;
-      box.hidden = !box.hidden;
-      $("#ach-toggle").classList.toggle("on", !box.hidden);
-    });
     $("#mkt-filters")?.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-mkt]");
       if (!btn) return;
@@ -2404,10 +2961,16 @@
       };
       reader.readAsText(f);
     });
-    $("#welcome-go")?.addEventListener("click", dismissWelcome);
+    $("#welcome-go")?.addEventListener("click", () => { sfx("accept"); dismissWelcome(); });
+    $("#debrief-go")?.addEventListener("click", () => {
+      sfx("click");
+      const box = $("#debrief");
+      if (box) box.hidden = true;
+    });
     $("#confirm-no").addEventListener("click", () => {
       state.pendingClear = "";
       $("#confirm").hidden = true;
+      sfx("click");
     });
     $("#confirm-yes").addEventListener("click", () => {
       const kind = state.pendingClear;
@@ -2452,6 +3015,7 @@
     $("#tabs").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-tab]");
       if (!btn) return;
+      sfx("tab");
       const tab = btn.dataset.tab;
       if (tab === "desk" || tab === "line") {
         useBoard(tab === "line" ? "airline" : "free");
@@ -2568,6 +3132,42 @@
       renderHangar();
       renderAirline();
     });
+    $("#set-service")?.addEventListener("change", (e) => {
+      state.profile.serviceOn = e.target.checked;
+      saveProfile();
+      renderHangar();
+      renderAircraft();
+      renderMissions();
+      renderActive();
+      renderAirline();
+    });
+    $("#set-interest")?.addEventListener("change", (e) => {
+      state.profile.interestOn = e.target.checked;
+      state.profile.lastInterestAt = Date.now();
+      saveProfile();
+      renderHangar();
+    });
+    $("#set-sound")?.addEventListener("change", (e) => {
+      state.profile.soundOn = e.target.checked;
+      saveProfile();
+      if (e.target.checked) sfx("complete");
+    });
+    $("#sound-test")?.addEventListener("click", () => {
+      state.profile.soundOn = true;
+      const box = $("#set-sound");
+      if (box) box.checked = true;
+      saveProfile();
+      sfx("issue");
+      setTimeout(() => sfx("complete"), 400);
+    });
+    $("#set-clock")?.addEventListener("change", (e) => {
+      state.profile.clock12 = e.target.value === "12";
+      saveProfile();
+      tickClock();
+      renderMissions();
+      renderActive();
+      renderLog();
+    });
     $("#set-ccy")?.addEventListener("change", (e) => {
       state.profile.currency = e.target.value;
       saveProfile();
@@ -2619,17 +3219,22 @@
         if (ac && canSelectAc(ac)) {
           state.ac = ac;
           localStorage.setItem("twofly-ac", ac.id);
+          sfx("select");
           renderAircraft();
           renderAcMeta();
         }
       } else if (sell) {
         err = sellAircraft(sell.dataset.sell);
+        if (!err) sfx("money");
       } else if (buy) {
         err = buyAircraft(buy.dataset.buy);
+        if (!err) sfx("money");
       } else if (repair) {
         err = repairAircraft(repair.dataset.repair);
+        if (!err) sfx("select");
       } else return;
       if (err) {
+        sfx("error");
         const note = $("#hangar-err");
         if (note) {
           note.hidden = false;
@@ -2654,6 +3259,7 @@
     state.dep = a;
     localStorage.setItem("twofly-dep", a.id);
     persistStore();
+    sfx("select");
     renderDep();
     loadWx(a);
   }
@@ -2701,12 +3307,26 @@
     run(renderHangar);
     run(renderSettings);
     run(bind);
+    run(tickClock);
+    run(() => {
+      if (accrueInterest()) {
+        renderHangar();
+        renderPilotChip();
+      }
+    });
     run(persistStore);
     run(maybeWelcome);
 
     window.addEventListener("pagehide", flushStore);
     window.addEventListener("beforeunload", flushStore);
 
+    setInterval(tickClock, 1000);
+    setInterval(function () {
+      if (accrueInterest()) {
+        renderHangar();
+        renderPilotChip();
+      }
+    }, 60000);
     setInterval(function () {
       fetch("/__twofly/ping", { cache: "no-store" }).catch(function () {});
     }, 2000);

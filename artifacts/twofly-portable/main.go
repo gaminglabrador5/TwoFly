@@ -21,8 +21,8 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-const appVersion = "1.5.0"
-const appBuild = "20260919g"
+const appVersion = "1.5.5"
+const appBuild = "20260921b"
 
 func dataDir() string {
 	base := os.Getenv("LOCALAPPDATA")
