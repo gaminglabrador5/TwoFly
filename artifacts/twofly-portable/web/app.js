@@ -1,7 +1,9 @@
 /* TwoFly — simple MSFS mission generator */
 (function () {
-  const VERSION = "1.5.5";
+  window.__twoflyReady = true;
+  const VERSION = "1.9.31";
   let sessionFlights = 0;
+  let sessionHard = 0;
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
   function esc(s) {
@@ -68,25 +70,32 @@
     f.connect(eg.g);
     src.start(eg.t);
   }
+  let lastUiSound = 0;
   function sfx(kind) {
     if (!soundEnabled()) return;
+    if (kind === "tab" || kind === "select") kind = "click";
+    if (kind === "click") {
+      const now = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+      if (now - lastUiSound < 45) return;
+      lastUiSound = now;
+    }
     ensureAudio();
     switch (kind) {
       case "click":
-        noise(0.04, 0.22, 2400, 0);
-        tone(1900, 0.04, "square", 0.05, 0);
+        noise(0.018, 0.16, 3200, 0);
+        tone(2100, 0.028, "square", 0.045, 0);
         break;
       case "tab":
-        noise(0.05, 0.18, 1400, 0);
-        tone(420, 0.06, "triangle", 0.08, 0);
+        sfx("click");
         break;
       case "issue":
-        noise(0.07, 0.2, 2100, 0);
-        tone(880, 0.05, "square", 0.07, 0);
-        noise(0.05, 0.14, 2500, 0.07);
-        tone(990, 0.05, "square", 0.06, 0.08);
-        noise(0.08, 0.16, 1800, 0.16);
-        tone(660, 0.12, "triangle", 0.1, 0.2, 440);
+        tone(1568, 0.045, "triangle", 0.14, 0);
+        tone(1865, 0.05, "triangle", 0.12, 0.07);
+        tone(2093, 0.09, "sine", 0.16, 0.14);
+        noise(0.08, 0.08, 1400, 0.16);
+        break;
+      case "select":
+        sfx("click");
         break;
       case "accept":
         tone(880, 0.09, "sine", 0.18, 0);
@@ -119,16 +128,12 @@
         tone(180, 0.16, "sawtooth", 0.1, 0);
         noise(0.1, 0.1, 500, 0);
         break;
-      case "select":
-        tone(640, 0.07, "sine", 0.1, 0);
-        noise(0.03, 0.1, 1600, 0);
-        break;
       default:
         sfx("click");
     }
   }
 
-  const AIRCRAFT = window.TWOFY_AIRCRAFT || [];
+  const AIRCRAFT = (window.TWOFY_AIRCRAFT || []).filter((a) => a && a.id);
 
   const US_STATES = [
     ["AL","Alabama"],["AK","Alaska"],["AZ","Arizona"],["AR","Arkansas"],
@@ -152,6 +157,7 @@
     { id: "express", label: "EXPRESS", emoji: "" },
     { id: "vip", label: "PRIORITY PAX", emoji: "" },
     { id: "bush", label: "FIELD RESUPPLY", emoji: "" },
+    { id: "medevac", label: "MEDEVAC", emoji: "" },
     { id: "ferry", label: "REPOSITION", emoji: "" },
   ];
 
@@ -215,6 +221,8 @@
     issueN: 5,
     mode: "free",
     pendingClear: "",
+    pendingAccept: null,
+    pendingRide: null,
   };
   state.collection = emptyCollection();
   useBoard("free");
@@ -352,7 +360,7 @@
           if (haversineNm(ap, lm) <= 20) marks.add(lm.id);
         });
         CITIES.forEach((ct) => {
-          if (haversineNm(ap, ct) <= 30) cities.add(ct.id);
+          if (cityHitsAirport(ap, ct)) cities.add(ct.id);
         });
         PORTS.forEach((pt) => {
           if (airportHitsPort(ap, pt)) ports.add(pt.id);
@@ -399,7 +407,7 @@
   }
 
   function payText(m, active) {
-    const airline = (m && m.mode === "airline") || state.mode === "airline";
+    const airline = m && m.mode ? m.mode === "airline" : state.mode === "airline";
     if (airline) return `${m.xp || xpFor(m)}xp ${moneyFmt(m.money)}`;
     if (active) return "IN PROGRESS";
     return moneyFmt(m.money);
@@ -414,13 +422,55 @@
   }
 
   const LICENSES = [
-    { n: 1, name: "STUDENT PILOT", xp: 0, unlock: ["piston", "bush", "vintage", "airship"] },
-    { n: 2, name: "PRIVATE PILOT", xp: 2000, unlock: ["helo", "evtol"] },
-    { n: 3, name: "COMMERCIAL PILOT", xp: 7000, unlock: ["turboprop"] },
-    { n: 4, name: "ATP", xp: 18000, unlock: ["jet", "airliner"] },
+    {
+      n: 1, name: "STUDENT PILOT", xp: 0,
+      unlock: ["piston", "bush", "vintage", "airship"],
+      types: ["cargo", "pax", "ferry"],
+      hopMax: 180,
+      jobs: ["Basic piston aircraft", "Local passenger hops", "Light cargo", "Repositioning"],
+      note: "Short visual legs and the aircraft that forgive a student.",
+      award: { money: 0, xp: 0 },
+    },
+    {
+      n: 2, name: "PRIVATE PILOT", xp: 4000,
+      unlock: ["helo", "evtol"],
+      types: ["cargo", "pax", "ferry", "bush"],
+      hopMax: 320,
+      jobs: ["Rotorcraft", "Field resupply", "Remote strips", "Longer passenger work"],
+      note: "People and cargo go farther, including unpaved fields and helicopters.",
+      award: { money: 2500, xp: 500 },
+    },
+    {
+      n: 3, name: "INSTRUMENT RATING", xp: 10000,
+      unlock: [],
+      types: ["cargo", "pax", "ferry", "bush", "express"],
+      hopMax: 520,
+      jobs: ["Express cargo", "IFR taskings", "Weather-sensitive deliveries", "Longer routes"],
+      note: "Instrument Flight Rules let you fly by reference to the gauges when the weather is down.",
+      award: { money: 15000, xp: 400 },
+      rating: true,
+    },
+    {
+      n: 4, name: "COMMERCIAL PILOT", xp: 22000,
+      unlock: ["turboprop"],
+      types: ["cargo", "pax", "ferry", "bush", "express", "vip", "medevac"],
+      hopMax: 900,
+      jobs: ["Turboprops", "VIP passengers", "Medevac", "Higher-value cargo"],
+      note: "Turboprops and paid passenger work. The flying is the job now.",
+      award: { money: 25000, xp: 600 },
+    },
+    {
+      n: 5, name: "ATP", xp: 50000,
+      unlock: ["jet", "airliner"],
+      types: ["cargo", "pax", "ferry", "bush", "express", "vip", "medevac"],
+      hopMax: 99999,
+      jobs: ["Jets and airliners", "Long-distance express", "High-value passenger work"],
+      note: "Airline Transport Pilot. Jets, long legs, and the work that pays like it.",
+      award: { money: 60000, xp: 1000 },
+    },
   ];
 
-  const PILOT_MARKS = ["1", "2", "3", "4", "5", "6", "7", "8"];
+  const PILOT_MARKS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16"];
 
   function defaultProfile() {
     const logXp = (loadLog() || []).filter((m) => m.flown).reduce((s, m) => s + (m.xp || 0), 0);
@@ -439,15 +489,22 @@
       interestOn: true,
       lastInterestAt: Date.now(),
       soundOn: true,
+      hudScale: 100,
+      simWatch: false,
       hangar: ["c172g"],
+      leases: {},
+      lastLeaseAt: Date.now(),
       showAirline: true,
       hours: {},
       sinceService: {},
       tails: {},
       currency: "USD",
+      units: "us",
+      sim: "both",
       tempUnit: "C",
       home: "",
       debt: 0,
+      certN: 1,
       stats: emptyStats(),
     };
   }
@@ -496,6 +553,8 @@
         sinceService: raw.sinceService && typeof raw.sinceService === "object" ? raw.sinceService : {},
         tails: raw.tails && typeof raw.tails === "object" ? raw.tails : {},
         currency: typeof raw.currency === "string" ? raw.currency : "USD",
+        units: raw.units === "us" || raw.units === "eu" ? raw.units : (raw.units === "imperial" ? "us" : raw.units === "metric" ? "eu" : "us"),
+        sim: raw.sim === "20" || raw.sim === "24" ? raw.sim : "both",
         tempUnit: raw.tempUnit === "F" ? "F" : "C",
         home: typeof raw.home === "string" ? raw.home : "",
         debt: Number.isFinite(raw.debt) ? Math.max(0, raw.debt) : (raw.loan && Number.isFinite(raw.loan.remaining) ? Math.max(0, raw.loan.remaining) : 0),
@@ -505,7 +564,13 @@
         interestOn: raw.interestOn !== false,
         lastInterestAt: Number(raw.lastInterestAt) > 0 ? Number(raw.lastInterestAt) : Date.now(),
         soundOn: raw.soundOn !== false,
+        hudScale: clampHud(raw.hudScale),
+        simWatch: raw.simWatch === true,
+        leases: raw.leases && typeof raw.leases === "object" ? raw.leases : {},
+        lastLeaseAt: Number(raw.lastLeaseAt) > 0 ? Number(raw.lastLeaseAt) : Date.now(),
+        certN: Number.isFinite(raw.certN) ? Math.max(1, Number(raw.certN)) : 0,
       };
+      out.certN = grandfatherCert(out.xp, out.certN);
       delete out.savings;
       delete out.loan;
       return out;
@@ -519,16 +584,76 @@
     persistStore();
   }
 
+  function licenseNFromXp(xp) {
+    let n = 1;
+    LICENSES.forEach((L) => {
+      if ((xp || 0) >= L.xp) n = L.n;
+    });
+    return n;
+  }
+
+  function grandfatherCert(xp, saved) {
+    const old = xp >= 18000 ? 5 : xp >= 7000 ? 4 : xp >= 4500 ? 3 : xp >= 2000 ? 2 : 1;
+    const now = licenseNFromXp(xp);
+    const held = Number(saved) > 0 ? Number(saved) : old;
+    return Math.max(1, held, now);
+  }
+
   function licenseFor(xp) {
-    let cur = LICENSES[0];
-    let next = LICENSES[1] || null;
-    for (let i = 0; i < LICENSES.length; i++) {
-      if (xp >= LICENSES[i].xp) {
-        cur = LICENSES[i];
-        next = LICENSES[i + 1] || null;
-      }
-    }
+    const x = xp == null ? ((state.profile && state.profile.xp) || 0) : xp;
+    const held = Math.max(licenseNFromXp(x), Number(state.profile && state.profile.certN) || 0, 1);
+    const cur = LICENSES.find((L) => L.n === held) || LICENSES[0];
+    const next = LICENSES.find((L) => L.n === held + 1) || null;
     return { ...cur, next };
+  }
+
+  function hasIfr() {
+    return licenseFor().n >= 3;
+  }
+
+  function wxCatOf(ap) {
+    return (wxSnap(ap) || {}).cat || "";
+  }
+
+  function isImc(cat) {
+    return cat === "IFR" || cat === "LIFR";
+  }
+
+  function missionImc(m) {
+    if (!m) return false;
+    return isImc(wxCatOf(m.dep)) || isImc(wxCatOf(m.dest));
+  }
+
+  function ifrIllegal(m) {
+    if (!isCareer(m)) return false;
+    if (!state.profile || !state.profile.locksOn) return false;
+    if (hasIfr()) return false;
+    return missionImc(m);
+  }
+
+  function ifrFine(m) {
+    if (!m) return { money: 800, xp: 50 };
+    const pay = m.money || 0;
+    const xp0 = m.xp || xpFor(m);
+    const money = Math.max(800, Math.min(8000, Math.round((pay * 0.4) / 5) * 5));
+    const xp = Math.max(50, Math.round(xp0 * 0.5));
+    return { money, xp };
+  }
+
+  const IFR_FEE = 12000;
+  const IFR_Q = [
+    { q: "IFR stands for which set of rules?", a: ["Instrument Flight Rules", "International Flight Rules", "In-flight Restriction"], i: 0 },
+    { q: "A report is IFR when which is true?", a: ["Ceiling below 1,000 ft or visibility below 3 SM", "Ceiling below 3,000 ft or visibility 5 SM or less", "Ceiling below 500 ft or visibility below 1 SM"], i: 0 },
+    { q: "In IMC you fly primarily by:", a: ["Outside visual references", "The aircraft instruments", "Ground landmarks only"], i: 1 },
+    { q: "You fly the missed approach when:", a: ["The runway environment is not in sight at the missed-approach point", "ATC is busy", "Fuel is below half"], i: 0 },
+    { q: "Entering IMC without an instrument rating is:", a: ["A training shortcut", "An illegal IFR operation", "Allowed below 1,000 ft AGL"], i: 1 },
+    { q: "Decision altitude is the height at which you must:", a: ["Have the runway environment in sight or go missed", "Begin the descent", "Level at pattern altitude"], i: 0 },
+    { q: "Eastbound IFR cruise (0–179°) is flown at:", a: ["Odd thousands (FL190, FL210…)", "Even thousands", "Any convenient altitude"], i: 0 },
+    { q: "Lost communications in IFR, the route to fly is:", a: ["Assigned, vectored, expected, then filed", "Direct to home field", "Descend immediately"], i: 0 },
+  ];
+
+  function ifrFee() {
+    return state.profile && state.profile.moneyOn === false ? 0 : IFR_FEE;
   }
 
   function unlockedClasses() {
@@ -545,8 +670,123 @@
     return unlockedClasses().has(cls);
   }
 
+  function isCareer(m) {
+    if (m) return m.mode === "airline";
+    return state.mode === "airline";
+  }
+
+  function modeTag(m) {
+    return isCareer(m) ? "CAREER" : "FREE";
+  }
+
+  function careerTypeSet() {
+    if (!isCareer() || !state.profile.locksOn) return null;
+    const lic = licenseFor(state.profile.xp);
+    return new Set(lic.types || TYPES.map((t) => t.id));
+  }
+
+  const ACH_PAY = {
+    first: [800, 80],
+    five: [1200, 100],
+    twentyfive: [4000, 250],
+    hundred: [12000, 800],
+    hours10: [1500, 120],
+    hours50: [5000, 400],
+    hours100: [10000, 700],
+    busy: [600, 60],
+    session: [800, 80],
+    butter10: [1500, 150],
+    pro25: [4000, 300],
+    clean10: [2000, 180],
+    heavyA: [2500, 200],
+    rough3: [400, 40],
+    around: [700, 70],
+    early: [500, 50],
+    night: [500, 50],
+    weekend: [1500, 150],
+    streak: [2500, 250],
+    home: [400, 40],
+    fromhome: [3500, 300],
+    pay: [600, 50],
+    living: [5000, 400],
+    bank: [2500, 200],
+    fleet5: [3000, 250],
+    hangar10: [6000, 400],
+    debtfree: [1500, 100],
+    cash: [800, 60],
+    dealer: [400, 40],
+    fleet100: [4000, 350],
+    cats: [1500, 150],
+    makers: [1500, 150],
+    jack: [5000, 400],
+    variety: [2500, 250],
+    faithful: [4000, 400],
+    fresh: [500, 50],
+    mechanic: [800, 80],
+    pc1: [400, 40],
+    pc10: [2000, 180],
+    pc25: [4500, 350],
+    fields10: [1200, 120],
+    fields25: [3500, 300],
+    fields50: [8000, 600],
+    lm1: [500, 50],
+    lm10: [2000, 200],
+    lm25: [5000, 400],
+    album: [8000, 600],
+    whole: [20000, 1200],
+    vfr: [200, 20],
+    mvfr: [600, 80],
+    ifr: [2500, 250],
+    lifr: [3500, 350],
+    wxset: [4000, 400],
+    wx10: [2500, 250],
+    cross: [800, 80],
+    fo: [1000, 100],
+    rev10: [2500, 200],
+    rev50: [8000, 600],
+    alhome: [3500, 300],
+    routes: [4000, 350],
+    alfleet: [2500, 200],
+    bush10: [2000, 200],
+    med5: [3000, 300],
+    soft: [500, 50],
+    high: [600, 60],
+    short: [800, 80],
+    vintage: [600, 60],
+    long: [2000, 200],
+    far: [2500, 250],
+    abort1: [50, 0],
+    clean10: [2000, 200],
+    legend: [2500, 250],
+    empty: [400, 40],
+    lied: [800, 80],
+    scenic: [600, 60],
+    abort3: [100, 0],
+    pedia10: [300, 40],
+    queen: [200, 20],
+    know: [800, 80],
+    verylong: [5000, 500],
+  };
+  const CERT_ACH = { priv: 2, inst: 3, comm: 4, atp: 5 };
+
+  let splashQueue = [];
+
   function inHangar(id) {
     return state.profile.hangar.includes(id);
+  }
+
+  function ownsAirframe(id) {
+    return !!(id && inHangar(id) && !isLeased(id));
+  }
+
+  function careerWear(m) {
+    if (!m || (m.mode || state.mode) !== "airline") return false;
+    const id = m.ac || (state.ac && state.ac.id);
+    return !!(id && inHangar(id));
+  }
+
+  function serviceBlocks(id) {
+    return state.mode === "airline" && inHangar(id) && needsService(id);
   }
 
   function airlineEligible(ac) {
@@ -559,6 +799,8 @@
   }
 
   const SERVICE_HRS = 40;
+  const WEAR_DROP = 75;
+  const USED_RATIO = 0.7;
   const HANGAR_CAP = 10;
 
   function sinceService(id) {
@@ -569,18 +811,51 @@
     return (state.profile.hours && state.profile.hours[id]) || 0;
   }
 
+  function healthPct(id) {
+    if (!state.profile || state.profile.serviceOn === false) return 100;
+    const pct = 100 - (sinceService(id) / SERVICE_HRS) * WEAR_DROP;
+    return Math.max(0, Math.round(pct * 10) / 10);
+  }
+
+  function healthColor(pct) {
+    const t = Math.max(0, Math.min(1, pct / 100));
+    const r = Math.round(196 + (46 - 196) * t);
+    const g = Math.round(74 + (140 - 74) * t);
+    const b = Math.round(58 + (72 - 58) * t);
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function healthHtml(id) {
+    const pct = healthPct(id);
+    return `<span class="health" style="color:${healthColor(pct)}">${Math.round(pct)}%</span>`;
+  }
+
+  function grounded(id) {
+    return !!(state.profile && state.profile.serviceOn && healthPct(id) <= 0);
+  }
+
   function needsService(id) {
-    if (!state.profile.serviceOn) return false;
-    return sinceService(id) >= SERVICE_HRS;
+    return grounded(id);
   }
 
   function repairCost(ac) {
-    return Math.max(750, Math.round((listPrice(ac) * 0.02) / 50) * 50);
+    if (!ac) return 0;
+    const missing = Math.max(0, 100 - healthPct(ac.id));
+    if (missing <= 0) return 0;
+    return Math.max(50, Math.round((listPrice(ac) * 0.02 * (missing / WEAR_DROP)) / 50) * 50);
+  }
+
+  function sellPrice(ac) {
+    if (!ac) return 0;
+    const sound = listPrice(ac) * USED_RATIO;
+    const pct = healthPct(ac.id) / 100;
+    const scrap = sound * 0.1;
+    return Math.round(scrap + (sound - scrap) * pct);
   }
 
   function creditLimit() {
     const n = licenseFor(state.profile.xp).n;
-    return [80000, 280000, 1400000, 8500000][n - 1] || 80000;
+    return [80000, 280000, 550000, 1400000, 8500000][n - 1] || 80000;
   }
 
   function creditLeft() {
@@ -597,7 +872,9 @@
     amt = Math.round(parseMoneyIn(amt) || Number(amt) || 0);
     if (amt <= 0) return "ENTER AMOUNT.";
     if (amt > creditLeft()) return "EXCEEDS AVAILABLE CREDIT.";
+    const principal = debtPrincipal();
     state.profile.debt = (state.profile.debt || 0) + amt;
+    state.profile.debtPrincipal = principal + amt;
     state.profile.money += amt;
     if (!state.profile.lastInterestAt) state.profile.lastInterestAt = Date.now();
     const st = pilotStats();
@@ -611,9 +888,14 @@
     if (amt <= 0) return "ENTER AMOUNT.";
     amt = Math.min(amt, state.profile.debt || 0, state.profile.money);
     if (amt <= 0) return "NOTHING TO REPAY.";
+    const principal = debtPrincipal();
+    const interestOwed = Math.max(0, (state.profile.debt || 0) - principal);
+    const fromPrincipal = Math.max(0, amt - interestOwed);
     state.profile.debt -= amt;
+    state.profile.debtPrincipal = Math.max(0, principal - fromPrincipal);
     state.profile.money -= amt;
     if (state.profile.debt === 0) {
+      state.profile.debtPrincipal = 0;
       state.profile.lastInterestAt = Date.now();
       pilotStats().repaid = (pilotStats().repaid || 0) + 1;
     }
@@ -621,8 +903,16 @@
     return "";
   }
 
-  const INTEREST_PER_DAY = 0.01;
-  const INTEREST_CATCHUP_DAYS = 7;
+  const INTEREST_APR = 0.08;
+  const INTEREST_CAP = 0.25;
+
+  function debtPrincipal() {
+    const p = state.profile;
+    if (!p) return 0;
+    if (p.debtPrincipal == null || !Number.isFinite(Number(p.debtPrincipal))) p.debtPrincipal = p.debt || 0;
+    p.debtPrincipal = Math.max(0, Math.min(Number(p.debtPrincipal) || 0, p.debt || 0));
+    return p.debtPrincipal;
+  }
 
   function accrueInterest() {
     const p = state.profile;
@@ -639,28 +929,98 @@
     }
     let days = Math.floor((now - last) / 86400000);
     if (days < 1) return 0;
-    days = Math.min(days, INTEREST_CATCHUP_DAYS);
     p.lastInterestAt = last + days * 86400000;
-    if ((p.debt || 0) <= 0) {
+    const principal = debtPrincipal();
+    if (principal <= 0) {
       saveProfile();
       return 0;
     }
-    let debt = p.debt;
-    let charge = 0;
-    for (let i = 0; i < days; i++) {
-      const c = Math.max(1, Math.round(debt * INTEREST_PER_DAY));
-      debt += c;
-      charge += c;
-    }
-    p.debt = debt;
+    const unpaid = Math.max(0, (p.debt || 0) - principal);
+    const room = Math.max(0, Math.round(principal * INTEREST_CAP) - unpaid);
+    const raw = Math.round(principal * INTEREST_APR * days / 365);
+    const charge = Math.max(0, Math.min(raw, room));
+    if (charge > 0) p.debt = (p.debt || 0) + charge;
     saveProfile();
     return charge;
+  }
+
+  function accrueLease() {
+    const p = state.profile;
+    if (!p) return [];
+    p.leases = p.leases && typeof p.leases === "object" ? p.leases : {};
+    const now = Date.now();
+    if (!p.moneyOn) {
+      p.lastLeaseAt = now;
+      return [];
+    }
+    const last = Number(p.lastLeaseAt) || now;
+    let days = Math.floor((now - last) / 86400000);
+    if (days < 1) return [];
+    days = Math.min(days, 7);
+    p.lastLeaseAt = last + days * 86400000;
+    const ids = Object.keys(p.leases || {});
+    const notes = [];
+    ids.forEach((id) => {
+      if (!inHangar(id)) {
+        delete p.leases[id];
+        return;
+      }
+      const ac = AIRCRAFT.find((a) => a.id === id);
+      if (!ac) {
+        delete p.leases[id];
+        return;
+      }
+      const due = leaseRate(ac) * days;
+      if (p.money >= due) {
+        p.money -= due;
+        p.leases[id].last = now;
+        p.leases[id].paid = (p.leases[id].paid || 0) + due;
+        if (p.leases[id].paid >= listPrice(ac)) {
+          delete p.leases[id];
+          notes.push({ id, name: ac.name, due, kept: true, owned: true });
+        } else {
+          notes.push({ id, name: ac.name, due, kept: true });
+        }
+      } else {
+        notes.push({ id, name: ac.name, due, kept: false });
+        p.hangar = p.hangar.filter((x) => x !== id);
+        delete p.leases[id];
+        if (state.ac && state.ac.id === id) {
+          const next = AIRCRAFT.find((a) => a.id === p.hangar[0]) || AIRCRAFT[0];
+          state.ac = next;
+          try { localStorage.setItem("twofly-ac", state.ac.id); } catch (e) {}
+        }
+      }
+    });
+    if (notes.length) saveProfile();
+    return notes;
+  }
+
+  function settleDesk() {
+    const interest = accrueInterest();
+    const leases = accrueLease();
+    if (interest || (leases && leases.length)) {
+      renderHangar();
+      renderPilotChip();
+    }
+    const gone = (leases || []).filter((n) => !n.kept);
+    const owned = (leases || []).filter((n) => n.owned);
+    if (gone.length || owned.length) {
+      const note = $("#hangar-err");
+      if (note) {
+        note.hidden = false;
+        const bits = [];
+        if (owned.length) bits.push(owned.map((n) => n.name.toUpperCase() + " IS YOURS.").join(" "));
+        if (gone.length) bits.push(gone.map((n) => n.name.toUpperCase() + " RETURNED — LEASE UNPAID.").join(" "));
+        note.textContent = bits.join(" ");
+      }
+    }
   }
 
   function repairAircraft(id) {
     const ac = AIRCRAFT.find((a) => a.id === id);
     if (!ac || !inHangar(id)) return "NOT IN HANGAR.";
-    if (!needsService(id)) return "SERVICE NOT DUE.";
+    if (healthPct(id) >= 100) return "AIRFRAME ALREADY AT 100%.";
     const cost = repairCost(ac);
     if (state.profile.moneyOn && state.profile.money < cost) return "INSUFFICIENT FUNDS.";
     if (state.profile.moneyOn) state.profile.money -= cost;
@@ -672,17 +1032,20 @@
     return "";
   }
 
-  function tailOf(id) {
-    const t = state.profile.tails && state.profile.tails[id];
-    return t ? String(t) : "";
+  function liveTail() {
+    return String((simSnap && simSnap.atcId) || "").trim().toUpperCase();
   }
 
-  function setTail(id, v) {
-    state.profile.tails = state.profile.tails || {};
-    const t = String(v || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 10);
-    if (t) state.profile.tails[id] = t;
-    else delete state.profile.tails[id];
-    saveProfile();
+  function liveCall() {
+    const c = String((simSnap && simSnap.callsign) || "").trim().toUpperCase();
+    const t = liveTail();
+    if (!c || c === t) return "";
+    return c;
+  }
+
+  function sortieTail() {
+    if (!simSnap || !simSnap.connected) return "";
+    return liveTail() || "TAIL UNKNOWN";
   }
 
   function canSelectAc(ac) {
@@ -702,37 +1065,38 @@
     return Math.round((base + ac.cruise * 700 + ac.range * 35 + (ac.pax || 0) * 6000 + (ac.payload || 0) * 1.4) / 1000) * 1000;
   }
 
+  function leaseRate(ac) {
+    const price = listPrice(ac);
+    return Math.max(80, Math.round((price * 0.002) / 10) * 10);
+  }
+
+  function isLeased(id) {
+    const leases = (state.profile && state.profile.leases) || {};
+    return !!leases[id];
+  }
+
+  function leasePaid(id) {
+    const row = state.profile && state.profile.leases && state.profile.leases[id];
+    return Math.max(0, Math.round((row && row.paid) || 0));
+  }
+
+  function leaseBuyout(id) {
+    const ac = AIRCRAFT.find((a) => a.id === id);
+    if (!ac) return 0;
+    return Math.max(0, listPrice(ac) - leasePaid(id));
+  }
+
   const CURRENCIES = [
     { id: "USD", name: "US DOLLAR", sym: "$", rate: 1 },
     { id: "EUR", name: "EURO", sym: "€", rate: 0.92 },
-    { id: "GBP", name: "POUND STERLING", sym: "£", rate: 0.79 },
-    { id: "CAD", name: "CANADIAN DOLLAR", sym: "C$", rate: 1.37 },
-    { id: "AUD", name: "AUSTRALIAN DOLLAR", sym: "A$", rate: 1.52 },
-    { id: "NZD", name: "NEW ZEALAND DOLLAR", sym: "NZ$", rate: 1.66 },
     { id: "JPY", name: "YEN", sym: "¥", rate: 148 },
+    { id: "GBP", name: "POUND STERLING", sym: "£", rate: 0.79 },
     { id: "CNY", name: "YUAN", sym: "¥", rate: 7.2 },
-    { id: "KRW", name: "WON", sym: "₩", rate: 1350 },
-    { id: "INR", name: "RUPEE", sym: "₹", rate: 83 },
-    { id: "IDR", name: "RUPIAH", sym: "Rp", rate: 15800 },
-    { id: "THB", name: "BAHT", sym: "฿", rate: 36 },
-    { id: "MYR", name: "RINGGIT", sym: "RM", rate: 4.7 },
-    { id: "PHP", name: "PESO", sym: "₱", rate: 56 },
-    { id: "VND", name: "DONG", sym: "₫", rate: 25000 },
-    { id: "SGD", name: "SINGAPORE DOLLAR", sym: "S$", rate: 1.34 },
-    { id: "HKD", name: "HONG KONG DOLLAR", sym: "HK$", rate: 7.8 },
-    { id: "TWD", name: "NEW TAIWAN DOLLAR", sym: "NT$", rate: 32 },
-    { id: "MXN", name: "MEXICAN PESO", sym: "MX$", rate: 17 },
-    { id: "BRL", name: "REAL", sym: "R$", rate: 5.1 },
+    { id: "AUD", name: "AUSTRALIAN DOLLAR", sym: "A$", rate: 1.52 },
+    { id: "CAD", name: "CANADIAN DOLLAR", sym: "C$", rate: 1.37 },
     { id: "CHF", name: "SWISS FRANC", sym: "CHF ", rate: 0.88 },
-    { id: "SEK", name: "KRONA", sym: "kr ", rate: 10.5 },
-    { id: "NOK", name: "KRONE", sym: "kr ", rate: 10.7 },
-    { id: "DKK", name: "KRONE", sym: "kr ", rate: 6.9 },
-    { id: "PLN", name: "ZLOTY", sym: "zł ", rate: 4.0 },
-    { id: "CZK", name: "KORUNA", sym: "Kč ", rate: 23 },
-    { id: "TRY", name: "LIRA", sym: "₺", rate: 32 },
-    { id: "ZAR", name: "RAND", sym: "R", rate: 18.5 },
-    { id: "AED", name: "DIRHAM", sym: "AED ", rate: 3.67 },
-    { id: "RUB", name: "RUBLE", sym: "₽", rate: 92 },
+    { id: "HKD", name: "HONG KONG DOLLAR", sym: "HK$", rate: 7.8 },
+    { id: "SGD", name: "SINGAPORE DOLLAR", sym: "S$", rate: 1.34 },
   ];
 
   function ccy() {
@@ -752,7 +1116,7 @@
     if (inHangar(id)) return "ALREADY IN HANGAR.";
     if (state.profile.hangar.length >= HANGAR_CAP) return "HANGAR AT CAPACITY (10).";
     if (!airlineEligible(ac)) return "NOT AUTHORIZED FOR PASSENGER OR CARGO SERVICE.";
-    if (state.profile.locksOn && !classUnlocked(ac.cls)) return "RANK DOES NOT AUTHORIZE THIS CLASS.";
+    if (state.profile.locksOn && !classUnlocked(ac.cls)) return "CERTIFICATE DOES NOT AUTHORIZE THIS CLASS.";
     const price = listPrice(ac);
     if (!state.profile.moneyOn) {
       state.profile.hangar.push(id);
@@ -770,11 +1134,56 @@
     return "";
   }
 
+  function leaseAircraft(id) {
+    const ac = AIRCRAFT.find((a) => a.id === id);
+    if (!ac) return "AIRCRAFT NOT ON FILE.";
+    if (inHangar(id)) return "ALREADY IN HANGAR.";
+    if (state.profile.hangar.length >= HANGAR_CAP) return "HANGAR AT CAPACITY (10).";
+    if (!airlineEligible(ac)) return "NOT AUTHORIZED FOR PASSENGER OR CARGO SERVICE.";
+    if (state.profile.locksOn && !classUnlocked(ac.cls)) return "CERTIFICATE DOES NOT AUTHORIZE THIS CLASS.";
+    const day = leaseRate(ac);
+    if (state.profile.moneyOn && state.profile.money < day) return "INSUFFICIENT FUNDS FOR THE FIRST DAY.";
+    if (state.profile.moneyOn) state.profile.money -= day;
+    state.profile.hangar.push(id);
+    state.profile.leases = state.profile.leases || {};
+    state.profile.leases[id] = { since: Date.now(), last: Date.now(), paid: state.profile.moneyOn ? day : 0 };
+    if (!state.profile.lastLeaseAt) state.profile.lastLeaseAt = Date.now();
+    pilotStats().boughtAt[id] = new Date().toISOString();
+    saveProfile();
+    return "";
+  }
+
+  function returnLease(id) {
+    if (!inHangar(id) || !isLeased(id)) return "NOT A LEASED AIRFRAME.";
+    state.profile.hangar = state.profile.hangar.filter((x) => x !== id);
+    delete state.profile.leases[id];
+    if (state.ac && state.ac.id === id) {
+      const next = AIRCRAFT.find((a) => a.id === state.profile.hangar[0]) || AIRCRAFT[0];
+      state.ac = next;
+      localStorage.setItem("twofly-ac", state.ac.id);
+    }
+    saveProfile();
+    return "";
+  }
+
+  function buyOutLease(id) {
+    if (!inHangar(id) || !isLeased(id)) return "NOT A LEASED AIRFRAME.";
+    const remain = leaseBuyout(id);
+    if (state.profile.moneyOn && state.profile.money < remain) return "INSUFFICIENT FUNDS TO BUY OUT.";
+    if (state.profile.moneyOn && remain) state.profile.money -= remain;
+    delete state.profile.leases[id];
+    const st = pilotStats();
+    st.cashBuys = (st.cashBuys || 0) + 1;
+    saveProfile();
+    return "";
+  }
+
   function sellAircraft(id) {
     if (!inHangar(id)) return "NOT IN HANGAR.";
+    if (isLeased(id)) return "LEASED AIRFRAMES ARE RETURNED, NOT SOLD.";
     const ac = AIRCRAFT.find((a) => a.id === id);
-    const price = ac ? listPrice(ac) : 0;
-    const proceeds = Math.round(price * 0.7);
+    const price = ac ? sellPrice(ac) : 0;
+    const proceeds = price;
     if (state.profile.moneyOn) state.profile.money += Math.max(0, proceeds);
     state.profile.hangar = state.profile.hangar.filter((x) => x !== id);
     pilotStats().sold = (pilotStats().sold || 0) + 1;
@@ -788,7 +1197,18 @@
   }
 
   function markSrc(id) {
-    return "pilots/" + id + ".jpg";
+    return "pilots/" + id + ".jpg?v=" + VERSION;
+  }
+
+  function ingestPhotoFallback(file, paint) {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      paint(img, img.naturalWidth || img.width, img.naturalHeight || img.height);
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
   }
 
   function iconHtml(profile, cls) {
@@ -841,37 +1261,43 @@
   function fmtApt(a) {
     if (!a) return "—";
     const city = a.c ? `, ${a.c}` : "";
-    return `${a.id}${a.iata ? " / " + a.iata : ""} — ${a.n}${city}`;
+    return `${a.id} — ${a.n}${city}`;
   }
 
   function shortApt(a) {
     return `${a.id}${a.c ? " · " + a.c : ""}`;
   }
 
-  function typeLabel(t) {
-    return (a.t === "L" && "Large") || "";
-  }
-  function fieldKind(a) {
-    return { L: "LARGE", M: "MEDIUM", S: "SMALL", W: "WATER", H: "HELIPORT" }[a.t] || a.t;
-  }
-
   function pick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  function hopRange(ac, hopKey) {
-    if (hopKey !== "auto" && HOPS[hopKey]) {
-      const [lo, hi] = HOPS[hopKey];
-      return [lo, Math.min(hi, ac.range * 0.82)];
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i];
+      a[i] = a[j];
+      a[j] = t;
     }
-    if (ac.cls === "helo" || ac.cls === "evtol") return [8, Math.min(80, ac.range * 0.6)];
-    if (ac.cls === "balloon" || ac.cls === "glider") return [5, Math.min(35, ac.range * 0.6)];
-    if (ac.cls === "airship") return [12, Math.min(90, ac.range * 0.5)];
-    if (ac.cls === "bush" || ac.cls === "vintage") return [15, Math.min(80, ac.range * 0.55)];
-    if (ac.cls === "piston") return [18, Math.min(110, ac.range * 0.55)];
-    if (ac.cls === "turboprop") return [25, Math.min(180, ac.range * 0.5)];
-    if (ac.cls === "jet") return [40, Math.min(280, ac.range * 0.45)];
-    return [50, Math.min(350, ac.range * 0.4)];
+    return a;
+  }
+
+  function hopRange(ac, hopKey) {
+    let lo, hi;
+    if (hopKey !== "auto" && HOPS[hopKey]) {
+      [lo, hi] = HOPS[hopKey];
+      hi = Math.min(hi, ac.range * 0.82);
+    } else {
+      lo = 12;
+      hi = Math.min(ac.range * 0.85, 1600);
+      if (ac.cls === "helo" || ac.cls === "evtol") hi = Math.min(hi, 180);
+    }
+    if (isCareer() && state.profile.locksOn) {
+      const cap = licenseFor(state.profile.xp).hopMax;
+      if (cap) hi = Math.min(hi, cap);
+    }
+    return [lo, Math.max(lo + 5, hi)];
   }
 
   function allowedTypes(ac, pref) {
@@ -879,16 +1305,39 @@
     if (ac.cls === "balloon" || ac.cls === "glider") pool = ["ferry"];
     else if (ac.pax === 0) pool = ["cargo", "express", "bush", "ferry"];
     else if (ac.cls === "jet") pool = ["pax", "vip", "cargo", "express", "ferry"];
-    else if (ac.cls === "bush" || ac.cls === "vintage") pool = ["bush", "cargo", "pax", "express", "ferry"];
-    else if (ac.cls === "helo" || ac.cls === "evtol") pool = ["pax", "cargo", "express", "vip", "ferry"];
-    else if (ac.cls === "turboprop" && ac.pax >= 8) pool = ["cargo", "pax", "express", "vip", "ferry"];
+    else if (ac.cls === "bush" || ac.cls === "vintage") pool = ["bush", "cargo", "pax", "express", "medevac", "ferry"];
+    else if (ac.cls === "helo" || ac.cls === "evtol") pool = ["pax", "cargo", "express", "vip", "medevac", "ferry"];
+    else if (ac.cls === "turboprop" && ac.pax >= 8) pool = ["cargo", "pax", "express", "vip", "medevac", "ferry"];
+    else if (ac.cls === "piston" || ac.cls === "turboprop") pool = ["pax", "cargo", "express", "vip", "bush", "medevac", "ferry"];
+    const cap = careerTypeSet();
+    if (cap) pool = pool.filter((t) => cap.has(t));
+    if (!pool.length) pool = ["ferry"];
     if (pref !== "any" && pool.includes(pref)) return [pref];
     if (pref !== "any") return pool;
     return pool;
   }
 
+  function dealTypes(ac, pref, n) {
+    const pool = allowedTypes(ac, pref);
+    if (!pool.length) return Array.from({ length: n }, () => "ferry");
+    if (pref !== "any" || pool.length === 1) {
+      return Array.from({ length: n }, () => pool[0]);
+    }
+    const out = [];
+    let deck = [];
+    while (out.length < n) {
+      if (!deck.length) deck = shuffle(pool);
+      out.push(deck.pop());
+    }
+    return out;
+  }
+
   function payloadFor(type, ac) {
     if (type === "ferry") return { kind: "empty", text: "NIL PAYLOAD — REPOSITION", lbs: 0, pax: 0 };
+    if (type === "medevac") {
+      const lbs = Math.min(ac.payload, 420 + Math.floor(Math.random() * 80));
+      return { kind: "pax", pax: 1, lbs, item: "MEDICAL TEAM", text: `1 PATIENT / ${lbs} LB MEDICAL` };
+    }
     if (type === "pax" || type === "vip") {
       const max = Math.max(1, ac.pax);
       const n = 1 + Math.floor(Math.random() * max);
@@ -899,47 +1348,363 @@
       40,
       Math.round((0.25 + Math.random() * 0.6) * ac.payload / 10) * 10
     );
-    return { kind: "cargo", pax: 0, lbs, text: `${lbs} LB CARGO` };
+    const item = pick(CARGO);
+    return { kind: "cargo", pax: 0, lbs, item, text: `${lbs} LB ${item}` };
   }
 
-  function briefing(type, dep, dest, pay, dist) {
-    const destName = dest.c || dest.n;
-    const co = state.profile.showAirline && state.profile.airline ? state.profile.airline.toUpperCase() + ". " : "";
-    const head = `${co}TASKING ${dep.id}–${dest.id}. DIST ${dist} NM. DEST ${destName}.`;
-    switch (type) {
-      case "cargo":
-        return `${head} LOAD ${pay.lbs} LB ${pick(CARGO)}. DELIVER TO RAMP.`;
-      case "pax":
-        return `${head} EMBARK ${pay.pax} PAX. TRANSPORT TO DESTINATION.`;
-      case "express":
-        return `${head} PRIORITY CONSIGNMENT ${pay.lbs} LB. ON-BLOCK TIME IS BINDING.`;
-      case "vip":
-        return `${head} PRIORITY PERSONNEL ${pay.pax} PAX. STABILIZED APPROACH REQUIRED.`;
-      case "bush":
-        return `${head} FIELD RESUPPLY ${pay.lbs} LB. SURFACE: ${dest.pv ? "PAVED" : "UNPAVED"}.`;
-      case "ferry":
-        return `${head} NIL PAYLOAD. REPOSITION AIRCRAFT. FUEL FOR LEG PLUS RESERVE.`;
-      default:
-        return `${head}`;
+  function wxBits(ap) {
+    const id = ap && (ap.id || ap);
+    const hit = id && wxCache.get(id);
+    const obs = hit && hit.obs;
+    const d = obs && (obs.dec || obs);
+    if (!d) return { cat: "", windKt: 0, gustKt: 0, wx: "" };
+    return {
+      cat: d.cat || "",
+      windKt: d.windKt || 0,
+      gustKt: d.gustKt || 0,
+      wx: d.wx || "",
+    };
+  }
+
+  function cargoPhrase(pay) {
+    const raw = String((pay && pay.item) || "GENERAL CARGO").toLowerCase();
+    return raw;
+  }
+
+  function isRotor(ac) {
+    return !!(ac && (ac.cls === "helo" || ac.cls === "evtol"));
+  }
+
+  function fieldKind(a) {
+    if (!a) return "field";
+    const n = String(a.n || "").toLowerCase();
+    if (a.t === "H" || /heliport|helipad/.test(n)) return "helipad";
+    if (a.t === "W" || /seaplane|water aerodrome/.test(n)) return "seaplane";
+    if (/air force|\bafb\b|\braf \b|\bnas \b|air base|airbase|military/.test(n)) return "military";
+    if (/international|sunport/.test(n) || (a.t === "L" && (a.rw || 0) >= 8000)) return "international";
+    if (/regional/.test(n) || (a.t === "M" && a.pv && (a.rw || 0) >= 5500)) return "regional";
+    if (/municipal|\bmuni\b/.test(n) || a.t === "M" || (a.t === "S" && a.pv && (a.rw || 0) >= 4000)) return "municipal";
+    if (!a.pv || (a.rw || 0) < 2500 || a.t === "S") return "strip";
+    return "municipal";
+  }
+
+  function isMountainField(a) {
+    if (!a) return false;
+    const id = String(a.id || "").toUpperCase();
+    if (["LOWI", "LSZS", "LFLJ", "VQPR", "VNLK", "KASE", "KTEX", "KAVX", "LPMA", "TNCM"].includes(id)) return true;
+    const el = a.el || 0;
+    const rw = a.rw || 0;
+    const k = fieldKind(a);
+    if (k === "helipad" || k === "international") return false;
+    if (k === "strip" && el >= 4000) return true;
+    if (el >= 8000 && rw && rw < 9000) return true;
+    if (el >= 6000 && rw && rw < 6000) return true;
+    return false;
+  }
+
+  function fieldKindLabel(kind) {
+    return ({
+      helipad: "HELIPAD",
+      seaplane: "SEAPLANE BASE",
+      military: "MILITARY FIELD",
+      international: "INTERNATIONAL",
+      regional: "REGIONAL",
+      municipal: "MUNICIPAL",
+      strip: "BUSH STRIP",
+      field: "AIRFIELD",
+    })[kind] || "AIRFIELD";
+  }
+
+  function careRank(a) {
+    const k = fieldKind(a);
+    if (k === "helipad") return 5;
+    if (k === "international") return 4;
+    if (k === "regional") return 3;
+    if (k === "municipal") return 1;
+    return 0;
+  }
+
+  function medevacRange(ac) {
+    const hi = Math.min(ac.range * 0.9, isRotor(ac) ? 220 : 520);
+    return [35, Math.max(hi, 90)];
+  }
+
+  function careLocale(dep, a) {
+    return {
+      rg: !!(dep && a && dep.rg && a.rg && dep.rg === a.rg),
+      cc: !!(dep && a && dep.cc && a.cc && dep.cc === a.cc),
+    };
+  }
+
+  function destFit(type, a, ac, dist) {
+    const k = fieldKind(a);
+    const rotor = isRotor(ac);
+    const d = dist || 0;
+    const loc = careLocale(state.dep, a);
+    const near = Math.max(0, 36 - d / 8);
+    if (k === "helipad") {
+      if (!rotor) return -999;
+      if (type === "medevac") {
+        const fromPad = fieldKind(state.dep) === "helipad";
+        if (fromPad && d < 20) return 28;
+        return 160 + (loc.rg ? 80 : loc.cc ? 28 : 0) + near;
+      }
+      return 75;
     }
+    if (type === "bush") {
+      if (k === "strip") return 95;
+      if (k === "municipal") return 45;
+      if (k === "regional") return 20;
+      if (k === "international") return 4;
+      return 25;
+    }
+    if (type === "medevac") {
+      const from = careRank(state.dep);
+      const to = careRank(a);
+      if (k === "strip") return -1;
+      if (to < from && k !== "helipad") return 4;
+      if (k === "international") return 130 + (loc.rg ? 90 : loc.cc ? 35 : 0) + near;
+      if (k === "regional") return 48 + (loc.rg ? 45 : loc.cc ? 12 : 0) + near * 0.5;
+      if (k === "municipal") return d < 40 ? 2 : 8;
+      return 2;
+    }
+    if (type === "vip") {
+      if (k === "international") return 80;
+      if (k === "regional") return 65;
+      if (k === "municipal") return 40;
+      return 22;
+    }
+    if (k === "international") return 58;
+    if (k === "regional") return 62;
+    if (k === "municipal") return 50;
+    if (k === "strip") return 22;
+    return 35;
+  }
+
+  function pickDest(cands, type, ac) {
+    let list = cands || [];
+    if (type === "medevac") {
+      const care = list.filter((c) => {
+        const k = fieldKind(c.a);
+        return k === "helipad" || k === "international" || k === "regional";
+      });
+      if (care.length) list = care;
+    }
+    const scored = list.map((c) => ({ ...c, fit: destFit(type, c.a, ac, c.d) })).filter((c) => c.fit > 10);
+    if (!scored.length) return null;
+    scored.sort((a, b) => b.fit - a.fit);
+    const best = scored[0].fit;
+    const slack = type === "medevac" ? 18 : 35;
+    const cap = type === "medevac" ? 3 : 8;
+    const pool = scored.filter((c) => c.fit >= best - slack);
+    return pool[Math.floor(Math.random() * Math.min(pool.length, cap))] || scored[0];
+  }
+
+  function placeName(dest) {
+    if (!dest) return dest && dest.id ? dest.id : "the field";
+    if (fieldKind(dest) === "helipad") {
+      const n = String(dest.n || "").replace(/\s+helipad$/i, "");
+      return n || dest.c || dest.id || "the pad";
+    }
+    return dest.c || dest.n || dest.id || "the field";
+  }
+
+  function isNightHop(m) {
+    if (!m || !m.depTime) return false;
+    const h = hourInTz(m.depTime, m.dep);
+    return h >= 20 || h < 6;
+  }
+
+  function whyLine(type, place, pay, dest) {
+    const n = (pay && pay.pax) || 0;
+    const item = cargoPhrase(pay);
+    if (type === "medevac") {
+      return pick([
+        `There's a patient who needs a higher level of care in ${place}.`,
+        `Air ambulance to ${place}. They're transferring to a hospital there.`,
+        `You've got a medevac going to ${place}.`,
+      ]);
+    }
+    if (type === "pax") {
+      if (n <= 1) return pick([
+        `Someone needs a ride to ${place}.`,
+        `One passenger is waiting for a flight to ${place}.`,
+        `You've got a passenger going to ${place}.`,
+      ]);
+      return pick([
+        `${n} passengers are heading to ${place} and need a ride over.`,
+        `There are ${n} passengers waiting for a flight to ${place}.`,
+        `You've got a flight going to ${place} with ${n} passengers.`,
+      ]);
+    }
+    if (type === "vip") {
+      if (n <= 1) return pick([
+        `Priority passenger heading to ${place}. They'd like a smooth ride.`,
+        `One passenger needs a ride to ${place}. Nothing fancy, just treat it like a charter.`,
+      ]);
+      return pick([
+        `${n} passengers are heading to ${place} and need a ride over.`,
+        `Priority flight to ${place} with ${n} passengers.`,
+      ]);
+    }
+    if (type === "express") {
+      return pick([
+        `A delivery of ${item} needs to get to ${place} today.`,
+        `There's a shipment of ${item} headed to ${place}. Time matters on this one.`,
+        `${item} headed to ${place}. Don't linger on the ramp.`,
+      ]);
+    }
+    if (type === "bush") {
+      return pick([
+        `A few boxes of ${item} are headed out to ${place}.`,
+        `There's a shipment of ${item} headed to ${place}.`,
+      ]);
+    }
+    if (type === "ferry") {
+      return pick([
+        `The aircraft needs to be moved over to ${place}.`,
+        `The aircraft is needed in ${place}, so you're taking it over there empty.`,
+        `You're taking this one empty to ${place}.`,
+      ]);
+    }
+    return pick([
+      `There's a shipment of ${item} headed to ${place}.`,
+      `A delivery of ${item} is ready to go to ${place}.`,
+      `A few boxes of ${item} are headed out to ${place}.`,
+    ]);
+  }
+
+  function wxTalk(dest) {
+    const w = wxBits(dest);
+    if (!w.cat) return "";
+    const windy = (w.gustKt || 0) >= 22 || (w.windKt || 0) >= 18;
+    const wx = String(w.wx || "").toUpperCase();
+    const precip = /TS/.test(wx) ? "storms" : /SN|GR/.test(wx) ? "snow" : /RA|DZ|SH/.test(wx) ? "rain" : /FG/.test(wx) ? "fog" : /BR/.test(wx) ? "mist" : /HZ|FU/.test(wx) ? "haze" : "";
+    if (w.cat === "LIFR") {
+      return pick([
+        "It's pretty socked in at the destination. Give yourself extra room on the approach.",
+        "The weather at the other end is poor. Don't count on seeing the field until late.",
+      ]);
+    }
+    if (w.cat === "IFR") {
+      return pick([
+        "Visibility isn't great around the destination. You'll want instruments on the way in.",
+        "It's IFR at the destination, so plan the arrival rather than looking for the field.",
+      ]);
+    }
+    if (precip === "storms") return "There are thunderstorms in the area. Give them a wide berth.";
+    if (precip === "snow") return "There's snow at the destination, so watch the runway.";
+    if (precip === "fog") return "There's fog around the destination. Leave yourself some extra time inbound.";
+    if (windy) {
+      return (w.gustKt || 0) > (w.windKt || 0) + 3
+        ? pick([
+          "There's a bit of wind along the route, gusty on the way in, so the approach may take a little more work.",
+          "It's gusty at the destination. Keep some extra speed in your pocket for the arrival.",
+        ])
+        : "There's a bit of wind at the destination, so the approach may take a little more work than usual.";
+    }
+    if (w.cat === "MVFR") {
+      return pick([
+        "It's a little murky at the destination. Nothing unusual, just keep an eye on it.",
+        "Conditions are a little unsettled at the other end, so keep an eye on them.",
+      ]);
+    }
+    if (precip === "rain") {
+      return pick([
+        "There's a little rain at the destination. Shouldn't be a problem.",
+        "It's wet at the other end. Nothing dramatic.",
+      ]);
+    }
+    if (precip === "haze" || precip === "mist") return "It's a bit hazy at the destination, but you should still see the field.";
+    if (w.cat === "VFR" && Math.random() < 0.62) {
+      return pick([
+        "The weather is behaving itself for once.",
+        "Weather looks good, so it should be an easy trip.",
+        "The forecast looks good, although things can change once you're up there.",
+      ]);
+    }
+    return "";
+  }
+
+  function fieldTalk(type, dest, dist, m) {
+    if (!dest) return "";
+    const kind = fieldKind(dest);
+    if (kind === "helipad") return "You're landing on a pad, not a runway.";
+    if (kind === "strip" || !dest.pv) {
+      return pick([
+        "It's a short strip. Make sure you're set up before you get there.",
+        "The destination is a little more remote than usual. Take your time with the approach.",
+      ]);
+    }
+    if (isMountainField(dest)) {
+      return "The destination is tucked into the mountains, so the approach deserves a little attention.";
+    }
+    if (isNightHop(m)) {
+      return pick([
+        "It's a late one. The route is straightforward, but you'll be making most of it after dark.",
+        "You'll be making most of this one after dark.",
+      ]);
+    }
+    if (type === "medevac" && Math.random() < 0.55) return "Time matters, but so does a stable approach.";
+    if (dist && dist < 80 && Math.random() < 0.7) return "It's a short flight, so this one should be fairly straightforward.";
+    if (dist && dist > 350 && Math.random() < 0.7) return "It's a longer trip than most of the jobs on the board.";
+    return "";
+  }
+
+  function closeTalk(type) {
+    if (Math.random() > 0.38) return "";
+    if (type === "pax" || type === "vip") {
+      return pick(["Get them there comfortably.", "Keep the arrival smooth."]);
+    }
+    if (type === "ferry") return "Just get it there and you're done.";
+    if (type === "express") return "Get it there on time.";
+    if (type === "medevac") return "Keep it stable and get them in.";
+    if (type === "bush") return "Take your time with the approach.";
+    return pick(["Get it there in one piece.", ""]);
+  }
+
+  function briefing(type, dep, dest, pay, dist, m) {
+    const place = placeName(dest);
+    const why = whyLine(type, place, pay, dest);
+    const wx = wxTalk(dest);
+    if (Math.random() < 0.18) return wx ? `${why} ${wx}` : why;
+    const field = fieldTalk(type, dest, dist, m);
+    const close = closeTalk(type);
+    const parts = [why];
+    if (wx) parts.push(wx);
+    if (field && parts.length < 3) parts.push(field);
+    if (close && parts.length < 3) parts.push(close);
+    return parts.filter(Boolean).join(" ");
+  }
+
+  function refreshBriefs(list) {
+    (list || []).forEach((m) => {
+      if (!m) return;
+      m.brief = briefing(m.type, m.dep, m.dest, m.pay, m.dist, m);
+    });
   }
 
   function payout(type, dist, pay, ac) {
-    const base = { cargo: 1.8, pax: 2.4, express: 2.8, vip: 3.6, bush: 2.6, ferry: 1.1 }[type] || 2;
-    const classMult = { piston: 1, bush: 1.1, turboprop: 1.4, jet: 2.2, airliner: 3.4, helo: 1.6 }[ac.cls] || 1;
-    const load = pay.lbs * 0.09 + pay.pax * 85;
-    return Math.round((280 + dist * base + load) * classMult / 5) * 5;
+    const base = { cargo: 4.4, pax: 5.8, express: 6.8, vip: 8.4, bush: 6.2, medevac: 7.8, ferry: 2.6 }[type] || 5;
+    const classMult = { piston: 1, bush: 1.1, vintage: 1.05, turboprop: 1.45, jet: 2.3, airliner: 3.5, helo: 1.65, evtol: 1.5 }[ac.cls] || 1;
+    const load = pay.lbs * 0.12 + pay.pax * 110;
+    return Math.round((520 + dist * base + load) * classMult / 5) * 5;
   }
 
   function constraints(ac, dest, type) {
     const bits = [];
-    if (dest.rw) bits.push(`DEST RWY ${dest.rw.toLocaleString()} FT`);
+    if (!dest) return bits;
+    if (dest.rw) bits.push(`DEST RWY ${fmtField(dest.rw)}`);
     bits.push(dest.pv ? "PAVED" : "UNPAVED / UNKNOWN");
     if (dest.lt) bits.push("LIGHTING LISTED");
-    if (dest.el && dest.el > 5000) bits.push(`ELEV ${dest.el.toLocaleString()} FT`);
+    if (dest.el && dest.el > 5000) bits.push(`ELEV ${fmtField(dest.el)}`);
+    bits.push(fieldKindLabel(fieldKind(dest)));
     if (ac.minRwy && dest.rw && dest.rw < ac.minRwy + 400) bits.push("MARGINAL LANDING DISTANCE");
     if (type === "vip") bits.push("STABILIZED APPROACH");
     if (type === "express") bits.push("TIME CRITICAL");
+    if (type === "express" && isCareer() && hasIfr()) bits.push("INSTRUMENT REQUIRED");
+    if (isCareer() && !hasIfr() && state.profile.locksOn) bits.push("NO INSTRUMENT RATING");
+    if (type === "medevac") bits.push("PATIENT TRANSFER");
     LANDMARKS.forEach((lm) => {
       if (haversineNm(dest, lm) <= 20) bits.push(`LANDMARK ${lm.n} ${Math.round(haversineNm(dest, lm))} NM`);
     });
@@ -948,7 +1713,7 @@
 
   function cruiseAlt(ac, dist, dep, dest) {
     const elev = Math.max(dep.el || 0, dest.el || 0);
-    if (ac.cls === "helo") return Math.min(4500 + elev, 9000);
+    if (ac.cls === "helo" || ac.cls === "evtol") return Math.min(4500 + elev, 9000);
     if (ac.cls === "bush" || ac.cls === "piston") {
       const cap = ac.cruise > 160 ? 12500 : 9500;
       return Math.min(Math.max(4500, elev + 2500 + Math.round(dist / 40) * 500), cap);
@@ -962,24 +1727,38 @@
     const dep = state.dep;
     const ac = state.ac;
     if (!dep || !ac) return [];
-    if (needsService(ac.id)) return [];
+    if (serviceBlocks(ac.id)) return [];
     const [minNm, maxNm] = hopRange(ac, state.hop);
-    const types = allowedTypes(ac, state.type);
-    const needPaved = state.hard || (ac.paved && state.hop !== "bush" && ac.cls !== "bush" && ac.cls !== "helo");
-    const helo = ac.cls === "helo";
     const n = state.issueN === 1 || state.issueN === 3 ? state.issueN : 5;
+    const types = dealTypes(ac, state.type, n);
+    const needPaved = state.hard || (ac.paved && state.hop !== "bush" && ac.cls !== "bush" && !isRotor(ac));
+    const rotor = isRotor(ac);
 
     const candidates = [];
     for (const a of airports) {
       if (a.id === dep.id) continue;
       if (needPaved && !a.pv) continue;
-      if (!helo && a.t === "H") continue;
-      if (!helo && ac.minRwy && a.rw && a.rw < ac.minRwy) continue;
+      if (!rotor && fieldKind(a) === "helipad") continue;
+      if (!rotor && ac.minRwy && a.rw && a.rw < ac.minRwy) continue;
       if (ac.cls === "airliner" && a.t === "S") continue;
       const d = haversineNm(dep, a);
       if (d < minNm || d > maxNm) continue;
       if (d > ac.range * 0.85) continue;
       candidates.push({ a, d });
+    }
+
+    if (types.includes("medevac")) {
+      const [mLo, mHi] = medevacRange(ac);
+      for (const a of airports) {
+        if (a.id === dep.id) continue;
+        if (!rotor && fieldKind(a) === "helipad") continue;
+        const k = fieldKind(a);
+        if (k !== "helipad" && k !== "international" && k !== "regional") continue;
+        const d = haversineNm(dep, a);
+        if (d < mLo || d > mHi) continue;
+        if (d > ac.range * 0.9) continue;
+        if (!candidates.some((c) => c.a.id === a.id)) candidates.push({ a, d });
+      }
     }
 
     const recent = new Set((pilotStats().recentDests || []).slice(0, 16));
@@ -993,7 +1772,8 @@
       // relax paved / min distance a little
       for (const a of airports) {
         if (a.id === dep.id) continue;
-        if (!helo && ac.minRwy && a.rw && a.rw < ac.minRwy * 0.85) continue;
+        if (!rotor && fieldKind(a) === "helipad") continue;
+        if (!rotor && ac.minRwy && a.rw && a.rw < ac.minRwy * 0.85) continue;
         const d = haversineNm(dep, a);
         if (d < Math.max(12, minNm * 0.5) || d > Math.max(maxNm * 1.3, 80)) continue;
         if (d > ac.range * 0.9) continue;
@@ -1005,32 +1785,47 @@
       const j = Math.floor(Math.random() * (i + 1));
       [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
     }
+    const allMed = types.length && types.every((t) => t === "medevac");
     const briefNm = Math.max(18, ac.cruise * 0.35);
     const midNm = Math.max(briefNm + 10, ac.cruise * 0.7);
     const brief = candidates.filter((c) => c.d <= briefNm);
     const mid = candidates.filter((c) => c.d > briefNm && c.d <= midNm);
     const rest = candidates.filter((c) => c.d > midNm);
     const ordered = [];
-    const take = (arr, n) => {
+    const take = (arr, count) => {
       for (const c of arr) {
-        if (ordered.length >= n) break;
+        if (ordered.length >= count) break;
         if (!ordered.includes(c)) ordered.push(c);
       }
     };
-    take(brief, n >= 5 ? 2 : n >= 3 ? 1 : 1);
-    take(mid, n >= 5 ? 2 : n >= 3 ? 1 : 0);
-    take(rest, n >= 5 ? 1 : n >= 3 ? 1 : 0);
-    take(candidates, n);
+    if (allMed) {
+      take(candidates.filter((c) => {
+        const k = fieldKind(c.a);
+        return k === "helipad" || k === "international" || k === "regional";
+      }), 24);
+    } else {
+      take(brief, n >= 5 ? 2 : n >= 3 ? 1 : 1);
+      take(mid, n >= 5 ? 2 : n >= 3 ? 1 : 0);
+      take(rest, n >= 5 ? 1 : n >= 3 ? 1 : 0);
+      take(candidates, Math.max(n, types.includes("medevac") ? 24 : n));
+      if (types.includes("medevac")) take(candidates.filter((c) => {
+        const k = fieldKind(c.a);
+        return k === "helipad" || k === "international" || k === "regional";
+      }), 24);
+    }
     candidates.length = 0;
     candidates.push(...ordered);
 
     const used = new Set();
     const out = [];
-    for (const c of candidates) {
-      if (out.length >= n) break;
+    let remaining = candidates.slice();
+    while (out.length < n && remaining.length) {
+      const type = types[out.length] || pick(types);
+      const c = pickDest(remaining, type, ac);
+      if (!c) break;
+      remaining = remaining.filter((x) => x.a.id !== c.a.id);
       if (used.has(c.a.id)) continue;
       used.add(c.a.id);
-      const type = pick(types);
       const dist = Math.round(c.d);
       const hdg = heading(dep, c.a);
       const pay = payloadFor(type, ac);
@@ -1054,10 +1849,10 @@
         xp,
         mode: state.mode,
         constraints: constraints(ac, c.a, type),
-        brief: briefing(type, dep, c.a, pay, dist),
+        brief: briefing(type, dep, c.a, pay, dist, { depTime: new Date(depMs).toISOString() }),
         ac: ac.id,
         acName: ac.name,
-        acTail: tailOf(ac.id),
+        acTail: sortieTail(),
         depTime: new Date(depMs).toISOString(),
         arrTime: new Date(depMs + eteMin * 60000).toISOString(),
       });
@@ -1066,19 +1861,20 @@
   }
 
   function missionText(m) {
+    if (!m || !m.dest) return "";
     const t = TYPES.find((x) => x.id === m.type);
     return [
       `TWOFLY DISPATCH`,
-      `${(t && t.label) || m.type}  ·  ${icaoOf(m.dep)} ${fieldCaption(m.dep)} → ${icaoOf(m.dest)} ${fieldCaption(m.dest)}  ·  ${m.dist} nm  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
+      `${(t && t.label) || m.type}  ·  ${icaoOf(m.dep)} ${fieldCaption(m.dep)} → ${icaoOf(m.dest)} ${fieldCaption(m.dest)}  ·  ${fmtNm(m.dist)}  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
       `Aircraft: ${m.acName}${m.acTail ? "  " + m.acTail : ""}`,
-      `Payload: ${m.pay.text}`,
-      `Suggested: ${m.alt.toLocaleString()} ft · ETE ~${fmtEte(m.eteMin)} · DEP ${fmtTimeOf(m.depTime)} · ARR ${fmtTimeOf(m.arrTime)}`,
-      `Dest: ${m.dest.n}${m.dest.c ? " / " + m.dest.c : ""} (${fieldKind(m.dest)}, rwy ${m.dest.rw || "?"} ft)`,
-      `Quote: $${m.money.toLocaleString()}  ·  XP: ${m.xp || xpFor(m)}`,
+      `Payload: ${payLabel(m.pay)}`,
+      `Suggested: ${fmtAlt(m.alt)} · ETE ~${fmtEte(m.eteMin)} · DEP ${fmtFieldTime(m.depTime, m.dep)} · ARR ${fmtFieldTime(m.arrTime, m.dest)}`,
+      `Dest: ${m.dest.n || ""}${m.dest.c ? " / " + m.dest.c : ""} (${fieldKind(m.dest)}, rwy ${m.dest.rw ? fmtField(m.dest.rw) : "?"})`,
+      `Quote: $${Number(m.money || 0).toLocaleString()}  ·  XP: ${m.xp || xpFor(m)}`,
       ``,
-      m.brief,
+      m.brief || "",
       ``,
-      `Notes: ${m.constraints.join(" · ")}`,
+      `Notes: ${(m.constraints || []).join(" · ")}`,
     ].join("\n");
   }
 
@@ -1086,6 +1882,29 @@
     const h = Math.floor(min / 60);
     const m = min % 60;
     return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m} min`;
+  }
+
+  function padHdg(h) {
+    const n = ((Math.round(Number(h) || 0) % 360) + 360) % 360;
+    return String(n).padStart(3, "0");
+  }
+
+  function reciprocal(h) {
+    return (Math.round(Number(h) || 0) + 180) % 360;
+  }
+
+  function hdgBits(h) {
+    return `hdg ${padHdg(h)}° · rec ${padHdg(reciprocal(h))}°`;
+  }
+
+  function fmtQnhBoth(d) {
+    if (!d) return "—";
+    let hpa = d.qnhHpa;
+    let inhg = d.qnhInHg;
+    if (hpa == null && inhg != null) hpa = inhg * 33.86389;
+    if (inhg == null && hpa != null) inhg = hpa / 33.86389;
+    if (hpa == null) return d.qnh || "—";
+    return `${Math.round(hpa)} hPa · ${inhg.toFixed(2)} inHg`;
   }
 
   const RANKS = LICENSES.map((L) => ({ xp: L.xp, name: L.name, n: L.n }));
@@ -1104,11 +1923,11 @@
   }
 
   function xpFor(m) {
-    const distXp = m.dist * 2;
-    const loadXp = (m.pay?.pax || 0) * 12 + Math.round((m.pay?.lbs || 0) / 25);
-    const mult = { cargo: 1, pax: 1.1, express: 1.25, vip: 1.35, bush: 1.2, ferry: 0.7 }[m.type] || 1;
+    const distXp = m.dist * 1.35;
+    const loadXp = (m.pay?.pax || 0) * 10 + Math.round((m.pay?.lbs || 0) / 30);
+    const mult = { cargo: 1, pax: 1.08, express: 1.18, vip: 1.25, bush: 1.15, medevac: 1.35, ferry: 0.7 }[m.type] || 1;
     let xp = Math.round((distXp + loadXp) * mult);
-    return Math.max(8, xp);
+    return Math.max(12, xp);
   }
 
   function dayKey(d = new Date()) {
@@ -1130,21 +1949,90 @@
     return parseInt(t, 10);
   }
 
-  function useF() {
-    return state.profile && state.profile.tempUnit === "F";
+  function useEU() {
+    return !!(state.profile && state.profile.units === "eu");
+  }
+
+  function fmtAlt(ft) {
+    const n = Number(ft);
+    if (!Number.isFinite(n)) return "";
+    return Math.round(n).toLocaleString() + " FT";
+  }
+
+  function fmtField(ft) {
+    const n = Number(ft);
+    if (!Number.isFinite(n) || n <= 0) return "";
+    if (useEU()) return Math.round(n * 0.3048).toLocaleString() + " M";
+    return Math.round(n).toLocaleString() + " FT";
+  }
+
+  function fmtNm(nm) {
+    return Math.round(Number(nm) || 0).toLocaleString() + " NM";
+  }
+
+  function fmtMass(lb) {
+    const n = Number(lb) || 0;
+    if (useEU()) return Math.round(n * 0.453592).toLocaleString() + " KG";
+    return Math.round(n).toLocaleString() + " LB";
+  }
+
+  function fmtKt(kt) {
+    return Math.round(Number(kt) || 0).toLocaleString() + " KT";
+  }
+
+  function fmtQnh(d) {
+    if (!d) return "—";
+    let hpa = d.qnhHpa;
+    let inhg = d.qnhInHg;
+    if (hpa == null && inhg != null) hpa = inhg * 33.86389;
+    if (inhg == null && hpa != null) inhg = hpa / 33.86389;
+    if (hpa == null && inhg == null) return d.qnh || "—";
+    if (useEU()) return Math.round(hpa) + " hPa";
+    return Number(inhg).toFixed(2) + " inHg";
+  }
+
+  function fmtVis(d) {
+    if (!d) return "—";
+    const sm = d.visSm != null ? d.visSm : (d.visM != null ? (d.visM >= 9999 ? 10 : d.visM / 1609.344) : null);
+    if (useEU()) {
+      if (d.visM != null) return d.visM >= 9999 ? "9999 M" : Math.round(d.visM).toLocaleString() + " M";
+      if (sm == null) return d.vis || "—";
+      if (sm >= 10) return "9999 M";
+      return Math.round(sm * 1609.344).toLocaleString() + " M";
+    }
+    if (sm == null) return d.vis || "—";
+    if (sm >= 10) return "10+ SM";
+    const shown = Math.round(sm * 10) / 10;
+    return shown + " SM";
+  }
+
+  function payLabel(pay) {
+    if (!pay) return "";
+    if (pay.kind === "empty") return "NIL PAYLOAD — REPOSITION";
+    if (pay.item === "MEDICAL TEAM" || /PATIENT/.test(pay.text || "")) return `1 PATIENT / ${fmtMass(pay.lbs)} MEDICAL`;
+    if (pay.kind === "pax") return `${pay.pax} PAX / ${fmtMass(pay.lbs)}`;
+    if (pay.kind === "cargo") return `${fmtMass(pay.lbs)} ${pay.item || ""}`.trim();
+    return pay.text || "";
+  }
+
+  function typeLabel(a) {
+    if (!a) return "";
+    let n = String(a.name || "");
+    const m = String(a.maker || "").trim();
+    if (m && n.toLowerCase().startsWith(m.toLowerCase())) n = n.slice(m.length).replace(/^[\s\-–—]+/, "");
+    return n || a.name || "";
   }
 
   function fmtTempNum(c) {
     if (c == null || Number.isNaN(c)) return null;
-    return useF() ? Math.round((c * 9) / 5 + 32) : Math.round(c);
+    return Math.round(c);
   }
 
   function fmtTempPair(t, dp) {
     const a = fmtTempNum(t);
     if (a == null) return "—";
-    const u = useF() ? "°F" : "°C";
     const b = fmtTempNum(dp);
-    return b == null ? `${a} ${u}` : `${a} / ${b} ${u}`;
+    return b == null ? `${a} °C` : `${a} / ${b} °C`;
   }
 
   function flightCat(visSm, ceilingFt) {
@@ -1175,6 +2063,13 @@
     } else if (visP) {
       visSm = visP[2] ? parseInt(visP[1], 10) + 0.5 : visP[1].includes("/") ? 0.5 : parseInt(visP[1], 10);
       out.vis = (visP[0] || visP[1] + "SM").replace("SM", " SM");
+    } else {
+      const visM = raw.match(/\b(?:KT|MPS)\s+(\d{4})(?:[NSEW]{1,2})?\b/);
+      if (visM) {
+        const meters = parseInt(visM[1], 10);
+        out.visM = meters;
+        visSm = meters >= 9999 ? 10 : meters / 1609.344;
+      }
     }
     const layers = [...raw.matchAll(/\b(FEW|SCT|BKN|OVC|VV)(\d{3})\b/g)];
     if (/\b(CLR|SKC|CAVOK|NSC)\b/.test(raw)) out.sky = (raw.match(/\b(CLR|SKC|CAVOK|NSC)\b/) || [])[1];
@@ -1188,40 +2083,283 @@
     });
     const wxg = [...raw.matchAll(/\s([+-]?(?:VC)?(?:MI|PR|BC|DR|BL|SH|TS|FZ)?(?:DZ|RA|SN|SG|IC|PL|GR|GS|UP|BR|FG|FU|VA|DU|SA|HZ|PO|SQ|FC|SS|DS)+)\b/g)];
     if (wxg.length) out.wx = wxg.map((m) => m[1]).join(" ");
-    const td = raw.match(/\b(M?\d{2})\/(M?\d{2})\b/);
-    if (td) {
-      out.tempC = parseMetarTemp(td[1]);
-      out.dewC = parseMetarTemp(td[2]);
+    const body = String(raw).split(/\bRMK\b/)[0];
+    const rmk = String(raw).split(/\bRMK\b/)[1] || "";
+    const slash = body.match(/\s(M?\d{2})\/(M?\d{2})(?:\s|$)/);
+    const tg = rmk.match(/\bT([01])(\d{3})([01])(\d{3})\b/);
+    if (slash) {
+      out.tempC = parseMetarTemp(slash[1]);
+      out.dewC = parseMetarTemp(slash[2]);
+    }
+    if (tg) {
+      const t = (tg[1] === "1" ? -1 : 1) * (parseInt(tg[2], 10) / 10);
+      const d = (tg[3] === "1" ? -1 : 1) * (parseInt(tg[4], 10) / 10);
+      if (out.tempC == null || Math.abs(t - out.tempC) <= 1.6) {
+        out.tempC = t;
+        out.dewC = d;
+      }
     }
     const a = raw.match(/\bA(\d{4})\b/);
     const q = raw.match(/\bQ(\d{4})\b/);
-    if (a) out.qnh = (parseInt(a[1], 10) / 100).toFixed(2) + " inHg";
-    else if (q) out.qnh = q[1] + " hPa";
+    if (a) {
+      out.qnhInHg = parseInt(a[1], 10) / 100;
+      out.qnhHpa = out.qnhInHg * 33.86389;
+      out.qnh = out.qnhInHg.toFixed(2) + " inHg";
+    } else if (q) {
+      out.qnhHpa = parseInt(q[1], 10);
+      out.qnhInHg = out.qnhHpa / 33.86389;
+      out.qnh = q[1] + " hPa";
+    }
     out.cat = flightCat(visSm, ceiling);
+    out.visSm = visSm;
+    out.ceiling = ceiling;
+    out.vrb = !!(wind && wind[1] === "VRB");
+    out.windDir = wind && wind[1] !== "VRB" ? parseInt(wind[1], 10) : null;
+    out.calm = /\b00000KT\b/.test(raw);
     return out;
   }
 
   let wxOfflineFlag = false;
 
+  function compassWord(deg) {
+    if (deg == null || Number.isNaN(deg)) return "";
+    const names = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"];
+    return names[Math.round((((deg % 360) + 360) % 360) / 45) % 8];
+  }
+
+  function wxWeatherWords(code) {
+    const raw = String(code || "").trim();
+    if (!raw || raw === "NIL") return "";
+    const bits = {
+      RA: "rain", "-RA": "light rain", "+RA": "heavy rain",
+      SN: "snow", "-SN": "light snow", "+SN": "heavy snow",
+      DZ: "drizzle", SHRA: "rain showers", TSRA: "thunderstorms", TS: "thunderstorms",
+      FG: "fog", BR: "mist", HZ: "haze", FU: "smoke",
+      FZFG: "freezing fog", FZRA: "freezing rain",
+      GR: "hail", PL: "ice pellets",
+    };
+    return raw.split(/\s+/).map((p) => bits[p] || p.replace(/^\+/, "heavy ").replace(/^-/, "light ").toLowerCase()).join(", ");
+  }
+
+  function skyWords(sky) {
+    const s = String(sky || "—");
+    if (s === "—" || s === "NIL") return "";
+    if (/CAVOK|CLR|SKC|NSC/.test(s)) return "The sky is clear.";
+    const layers = [...s.matchAll(/\b(FEW|SCT|BKN|OVC|VV)(\d{3})\b/g)];
+    if (!layers.length) return s === "FEW" || s === "SCT" || s === "BKN" || s === "OVC" ? `Clouds are ${s.toLowerCase()}.` : "";
+    const name = { FEW: "a few clouds", SCT: "scattered clouds", BKN: "a broken ceiling", OVC: "overcast", VV: "vertical visibility" };
+    return layers.map((m) => {
+      const ft = parseInt(m[2], 10) * 100;
+      const n = name[m[1]] || m[1];
+      return `${n.charAt(0).toUpperCase() + n.slice(1)} at ${ft.toLocaleString()} ft.`;
+    }).join(" ");
+  }
+
+  function explainWx(obs) {
+    if (!obs || !obs.dec) return "";
+    const d = obs.dec;
+    const parts = [];
+    if (obs.nm) parts.push(`No METAR on file here. This reading is from ${obs.id}, ${fmtNm(obs.nm)} away.`);
+    else if (obs.source === "metar") parts.push("This is the issued METAR. The simulator's sky can disagree.");
+    if (d.calm || d.wind === "CALM") parts.push("Wind is calm.");
+    else if (d.vrb) parts.push(`Wind is variable at ${d.windKt || "—"} knots.`);
+    else if (d.windDir != null) {
+      const from = compassWord(d.windDir);
+      const g = d.gustKt && d.gustKt > (d.windKt || 0) + 3 ? `, gusting ${d.gustKt}` : "";
+      parts.push(`Wind is from the ${from} at ${d.windKt} knots${g}.`);
+    }
+    if (d.visSm != null || d.visM != null) {
+      const vis = fmtVis(d);
+      if (useEU()) parts.push(d.visM >= 9999 || d.visSm >= 10 ? "Visibility is 10 km or more." : `Visibility is about ${vis}.`);
+      else parts.push(d.visSm >= 10 ? "Visibility is more than 10 miles." : `Visibility is about ${vis.replace(" SM", " miles")}.`);
+    } else if (d.vis && d.vis !== "—") parts.push(`Visibility ${d.vis}.`);
+    const sky = skyWords(d.sky);
+    if (sky) parts.push(sky);
+    const wx = wxWeatherWords(d.wx);
+    if (wx) parts.push("Weather: " + wx + ".");
+    if (d.tempC != null) {
+      const t = fmtTempNum(d.tempC);
+      const dp = fmtTempNum(d.dewC);
+      parts.push(dp == null ? `Temperature ${t} °C.` : `Temperature ${t} °C, dewpoint ${dp} °C.`);
+    }
+    if (d.qnhHpa != null || d.qnhInHg != null || (d.qnh && d.qnh !== "—")) {
+      const q = fmtQnh(d);
+      parts.push(useEU()
+        ? `QNH ${q}. Set that on the altimeter.`
+        : `Altimeter ${q}. Set that so field elevation reads correctly.`);
+    }
+    if (d.cat === "VFR") parts.push("Category VFR.");
+    else if (d.cat === "MVFR") parts.push("Category MVFR.");
+    else if (d.cat === "IFR") parts.push("Category IFR. Plan the arrival on instruments.");
+    else if (d.cat === "LIFR") parts.push("Category LIFR. Poor weather.");
+    return parts.join(" ");
+  }
+
+  function whyAircraft(ac, dest, type, dist) {
+    if (!ac) return "";
+    const k = fieldKind(dest);
+    const el = (dest && dest.el) || 0;
+    const rw = (dest && dest.rw) || 0;
+    if (type === "medevac" && isRotor(ac) && k === "helipad") {
+      return "A helicopter can land at the hospital pad instead of using a field and transferring by ground.";
+    }
+    if (type === "medevac" && !isRotor(ac)) {
+      return "Fixed-wing air ambulance uses the nearest large field. The patient usually finishes the last miles on the ground.";
+    }
+    if (k === "helipad" && isRotor(ac)) {
+      return "Rotor is required here — there is no runway, only a pad.";
+    }
+    if (k === "strip" && (ac.cls === "bush" || ac.cls === "piston" || isRotor(ac))) {
+      return "This type can use a short strip that a heavier aircraft would have to skip.";
+    }
+    if (ac.cls === "jet" && (dist || 0) > 180) {
+      return "A jet covers this distance without turning the day into a fuel stop.";
+    }
+    if (ac.cls === "turboprop" && (k === "regional" || k === "municipal")) {
+      return "A turboprop fits mixed regional fields: faster than a piston, still usable on a shorter runway.";
+    }
+    if (el >= 7000) {
+      return "High elevation cuts performance. Extra power and runway matter more here than they do at sea level.";
+    }
+    if (ac.minRwy && rw && rw < ac.minRwy + 1200 && rw >= (ac.minRwy || 0)) {
+      return "The destination runway is on the short side for this type. Plan the landing.";
+    }
+    return "";
+  }
+
+  function hopNote(m, ac) {
+    if (!m || !m.dest) return "";
+    if (m.type === "express" && isCareer(m) && licenseFor(state.profile.xp).n >= 3) {
+      return "Express is filed IFR. Stay on the gauges if the weather comes down.";
+    }
+    const el = m.dest.el || 0;
+    if (el >= 7000) {
+      return `Destination is ${el.toLocaleString()} ft. Thinner air — longer takeoff, faster true airspeed on approach.`;
+    }
+    return "";
+  }
+
+  function jobLearnHtml(m) {
+    const ac = (m.ac && AIRCRAFT.find((a) => a.id === m.ac)) || state.ac;
+    const why = whyAircraft(ac, m.dest, m.type, m.dist);
+    let note = hopNote(m, ac);
+    if (why && note && /pad/i.test(why) && /pad/i.test(note)) note = "";
+    return `${why ? `<p class="learn why">${esc(why)}</p>` : ""}${note ? `<p class="learn note">${esc(note)}</p>` : ""}`;
+  }
+
   function weatherOffline() {
     return (typeof navigator !== "undefined" && navigator.onLine === false) || wxOfflineFlag;
   }
 
-  async function fetchMetarLine(id) {
+  function metarIssuedAt(raw) {
+    const m = String(raw || "").match(/\b(\d{2})(\d{2})(\d{2})Z\b/);
+    if (!m) return null;
+    const now = new Date();
+    let y = now.getUTCFullYear();
+    let mo = now.getUTCMonth();
+    const day = parseInt(m[1], 10);
+    const hh = parseInt(m[2], 10);
+    const mm = parseInt(m[3], 10);
+    if ([day, hh, mm].some((n) => Number.isNaN(n)) || hh > 23 || mm > 59 || day < 1 || day > 31) return null;
+    let t = Date.UTC(y, mo, day, hh, mm, 0);
+    const nowMs = now.getTime();
+    if (t - nowMs > 15 * 86400000) {
+      mo -= 1;
+      if (mo < 0) { mo = 11; y -= 1; }
+      t = Date.UTC(y, mo, day, hh, mm, 0);
+    } else if (nowMs - t > 15 * 86400000) {
+      mo += 1;
+      if (mo > 11) { mo = 0; y += 1; }
+      t = Date.UTC(y, mo, day, hh, mm, 0);
+    }
+    return t;
+  }
+
+  function metarAgeMin(raw) {
+    const t = metarIssuedAt(raw);
+    if (t == null) return 9999;
+    return (Date.now() - t) / 60000;
+  }
+
+  function metarFresh(raw) {
+    const age = metarAgeMin(raw);
+    return age >= -15 && age <= 150;
+  }
+
+  function metarZ(raw) {
+    const m = String(raw || "").match(/\b\d{2}(\d{4})Z\b/);
+    return m ? m[1] + "Z" : "";
+  }
+
+  function metarReports(text) {
+    const raw = String(text || "").replace(/\r/g, "\n").trim();
+    if (!raw) return [];
+    const chunks = raw.split(/(?=(?:^|\n)\s*(?:METAR|SPECI)\s+)/i);
+    const out = [];
+    chunks.forEach((chunk) => {
+      String(chunk).split(/\n+/).forEach((line) => {
+        const s = line.trim().replace(/^(?:METAR|SPECI)\s+/, "");
+        if (/^[A-Z0-9]{4}\s+\d{6}Z\b/.test(s)) out.push(s);
+      });
+    });
+    if (!out.length) {
+      const s = raw.replace(/^(?:METAR|SPECI)\s+/, "").trim();
+      if (/^[A-Z0-9]{4}\s+\d{6}Z\b/.test(s.split(/\n/)[0] || "")) out.push(s.split(/\n/)[0].trim());
+    }
+    return out;
+  }
+
+  function pickNewestMetar(text, maxAgeMin) {
+    const cap = maxAgeMin == null ? 90 : maxAgeMin;
+    let best = "";
+    let bestAge = 99999;
+    metarReports(text).forEach((line) => {
+      const age = metarAgeMin(line);
+      if (age < -15 || age > cap) return;
+      if (age < bestAge) {
+        bestAge = age;
+        best = line;
+      }
+    });
+    return best;
+  }
+
+  function pickFreshMetar(text) {
+    return pickNewestMetar(text, 90);
+  }
+
+  async function fetchMetarLine(id, maxAgeMin, fresh) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       wxOfflineFlag = true;
       return "";
     }
-    try {
-      const r = await fetch("https://metar.vatsim.net/" + encodeURIComponent(id), { cache: "no-store" });
-      wxOfflineFlag = false;
-      if (!r.ok) return "";
+    const uid = String(id || "").toUpperCase();
+    if (!/^[A-Z0-9]{3,4}$/.test(uid)) return "";
+    const cap = maxAgeMin == null ? 24 * 60 : maxAgeMin;
+    const urls = [
+      "https://metar.vatsim.net/" + encodeURIComponent(uid),
+      "https://aviationweather.gov/api/data/metar?ids=" + encodeURIComponent(uid) + "&format=raw&hours=24",
+      "/__twofly/metar?id=" + encodeURIComponent(uid) + (fresh ? "&fresh=1" : ""),
+    ];
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const jobs = urls.map(async (url) => {
+      const r = await fetch(url, { cache: "no-store", signal: ctrl.signal });
+      if (!r.ok) throw new Error("bad");
       const t = (await r.text()).trim();
-      if (!t || t.toUpperCase().includes("NO METAR") || t.length < 10) return "";
-      if (!/[A-Z0-9]{4}\s+\d{6}Z/.test(t) && !/^METAR\s/.test(t)) return "";
-      return t.replace(/^METAR\s+/, "");
+      if (!t || t.toUpperCase().includes("NO METAR") || t.length < 10) throw new Error("empty");
+      const line = pickNewestMetar(t, cap);
+      if (!line) throw new Error("stale");
+      return line;
+    });
+    try {
+      const line = await Promise.any(jobs);
+      clearTimeout(timer);
+      ctrl.abort();
+      wxOfflineFlag = false;
+      return line;
     } catch {
-      wxOfflineFlag = true;
+      clearTimeout(timer);
       return "";
     }
   }
@@ -1230,99 +2368,29 @@
     return airports
       .filter((x) => x.id && x.id.length === 4 && x.id !== ap.id && x.lat != null)
       .map((x) => ({ ap: x, d: haversineNm(ap, x) }))
-      .filter((x) => x.d <= 60)
+      .filter((x) => x.d <= 20)
       .sort((a, b) => a.d - b.d)
-      .slice(0, 8);
+      .slice(0, 2);
   }
 
-  async function modelObs(ap) {
-    const url =
-      "https://api.open-meteo.com/v1/forecast?latitude=" +
-      ap.lat +
-      "&longitude=" +
-      ap.lon +
-      "&current=temperature_2m,relative_humidity_2m,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,wind_gusts_10m,visibility,weather_code" +
-      "&wind_speed_unit=kn&temperature_unit=celsius&pressure_unit=hpa";
-    const r = await fetch(url, { cache: "no-store" });
-    if (!r.ok) throw new Error("model");
-    const j = await r.json();
-    const c = j.current || {};
-    const visSm = c.visibility != null ? Math.round((c.visibility / 1609.34) * 10) / 10 : null;
-    const cover = c.cloud_cover;
-    let sky = "—";
-    if (cover != null) {
-      if (cover < 10) sky = "CLR";
-      else if (cover < 25) sky = "FEW";
-      else if (cover < 50) sky = "SCT";
-      else if (cover < 90) sky = "BKN";
-      else sky = "OVC";
-    }
-    const dir = c.wind_direction_10m != null ? String(Math.round(c.wind_direction_10m / 10) * 10).padStart(3, "0") : "VRB";
-    const spd = c.wind_speed_10m != null ? String(Math.round(c.wind_speed_10m)).padStart(2, "0") : "00";
-    const gst = c.wind_gusts_10m != null && c.wind_gusts_10m >= (c.wind_speed_10m || 0) + 5 ? "G" + String(Math.round(c.wind_gusts_10m)).padStart(2, "0") : "";
-    return {
-      source: "model",
-      id: ap.id,
-      nm: 0,
-      raw: "",
-      dec: {
-        wind: `${dir}/${spd}${gst} KT`,
-        vis: visSm != null ? visSm + " SM" : "—",
-        sky,
-        wx: weatherCodeText(c.weather_code),
-        tempC: c.temperature_2m != null ? Math.round(c.temperature_2m) : null,
-        dewC: null,
-        qnh: c.pressure_msl != null ? Math.round(c.pressure_msl) + " hPa" : "—",
-        cat: flightCat(visSm, cover >= 90 ? 2000 : cover >= 50 ? 4000 : 99999),
-        windKt: c.wind_speed_10m != null ? Math.round(c.wind_speed_10m) : 0,
-        gustKt: c.wind_gusts_10m != null ? Math.round(c.wind_gusts_10m) : 0,
-      },
-    };
-  }
-
-  function weatherCodeText(code) {
-    const map = {
-      0: "NIL",
-      1: "FAIR",
-      2: "PARTLY CLOUDY",
-      3: "OVERCAST",
-      45: "FG",
-      48: "FZFG",
-      51: "-DZ",
-      61: "-RA",
-      63: "RA",
-      65: "+RA",
-      71: "-SN",
-      73: "SN",
-      75: "+SN",
-      80: "-SHRA",
-      81: "SHRA",
-      95: "TSRA",
-    };
-    return map[code] || "NIL";
-  }
-
-  async function observationFor(ap) {
+  async function observationFor(ap, fresh) {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       wxOfflineFlag = true;
       const e = new Error("offline");
       e.offline = true;
       throw e;
     }
-    const own = await fetchMetarLine(ap.id);
+    const own = await fetchMetarLine(ap.id, 24 * 60, fresh);
     if (own) return { source: "metar", id: ap.id, nm: 0, raw: own, dec: decodeMetar(own) };
     const near = nearbyStations(ap);
     const texts = await Promise.all(
-      near.map((n) => fetchMetarLine(n.ap.id).then((t) => ({ id: n.ap.id, nm: n.d, t })))
+      near.map((n) => fetchMetarLine(n.ap.id, 90, fresh).then((t) => ({ id: n.ap.id, nm: n.d, t })))
     );
-    const hit = texts.find((x) => x.t);
+    const hit = texts.filter((x) => x.t).sort((a, b) => a.nm - b.nm)[0];
     if (hit) return { source: "metar", id: hit.id, nm: Math.round(hit.nm), raw: hit.t, dec: decodeMetar(hit.t) };
-    if (weatherOffline()) {
-      const e = new Error("offline");
-      e.offline = true;
-      throw e;
-    }
-    return modelObs(ap);
+    const e = new Error("nometar");
+    e.offline = weatherOffline();
+    throw e;
   }
 
   function renderWxBody(ap, obs, err, slot) {
@@ -1338,58 +2406,94 @@
     if (err) {
       if (meta) meta.textContent = ap.id;
       const offline = err === true ? weatherOffline() : !!(err && err.offline) || weatherOffline();
-      box.innerHTML = `<p class="muted">${offline ? "WEATHER SYSTEM OFFLINE." : "NO OBSERVATION ON FILE."}</p>
+      box.innerHTML = `<p class="muted">${offline ? "WEATHER SYSTEM OFFLINE." : "NO METAR DATA AVAILABLE."}</p>
         <button type="button" class="ghost tiny" data-wx-refresh="${isArr ? "arr" : "dep"}">REFRESH</button>`;
       return;
     }
+    if (!obs || !obs.dec || obs.source === "model") {
+      renderWxBody(ap, null, true, slot);
+      return;
+    }
     const d = obs.dec;
-    const from =
-      obs.source === "model"
-        ? "AREA MODEL. NO METAR ON FILE."
-        : obs.nm
-          ? `OBS FROM ${obs.id} · ${obs.nm} NM`
-          : `OBS ${obs.id}`;
+    const from = obs.nm
+      ? `METAR ${obs.id} ${metarZ(obs.raw)} · ${fmtNm(obs.nm)}`
+      : `METAR ${obs.id} ${metarZ(obs.raw)}`.trim();
     if (meta) meta.textContent = ap.id + (ap.n ? " · " + ap.n : "");
     box.innerHTML = `
       <p class="wx-from">${from}</p>
       <div class="wx-grid">
         <div><span>WIND</span><b>${d.wind}</b></div>
-        <div><span>VIS</span><b>${d.vis}</b></div>
+        <div><span>VIS</span><b>${fmtVis(d)}</b></div>
         <div><span>SKY</span><b>${d.sky}</b></div>
         <div><span>WX</span><b>${d.wx}</b></div>
-        <div><span>TEMP / DP</span><b>${fmtTempPair(d.tempC, d.dewC)}</b></div>
-        <div><span>QNH</span><b>${d.qnh}</b></div>
+        <div><span>TEMP</span><b>${fmtTempNum(d.tempC) == null ? "—" : fmtTempNum(d.tempC) + " °C"}</b></div>
+        <div><span>DEWPOINT</span><b>${fmtTempNum(d.dewC) == null ? "—" : fmtTempNum(d.dewC) + " °C"}</b></div>
+        <div><span>${useEU() ? "QNH" : "ALTIMETER"}</span><b>${fmtQnh(d)}</b></div>
         <div><span>CATEGORY</span><b class="wx-cat cat-${d.cat}">${d.cat}</b></div>
       </div>
       ${obs.raw ? `<pre class="wx-raw">${obs.raw}</pre>` : ""}
-      <button type="button" class="ghost tiny" data-wx-refresh="${isArr ? "arr" : "dep"}">REFRESH</button>`;
+      <p class="wx-plain" hidden>${esc(explainWx(obs))}</p>
+      <div class="wx-acts">
+        ${explainWx(obs) ? `<button type="button" class="ghost tiny" data-wx-plain="${isArr ? "arr" : "dep"}">EXPLAIN THIS</button>` : ""}
+        <button type="button" class="ghost tiny" data-wx-refresh="${isArr ? "arr" : "dep"}">REFRESH</button>
+      </div>`;
+  }
+
+  const wxGen = { dep: 0, arr: 0 };
+
+  function loadWxStore() {
+    try {
+      const raw = JSON.parse(localStorage.getItem("twofly-wx") || "{}");
+      Object.keys(raw).forEach((id) => {
+        const row = raw[id];
+        if (row && row.obs && row.obs.raw) wxCache.set(id, row);
+      });
+    } catch {}
+  }
+
+  function saveWxStore() {
+    const rows = [...wxCache.entries()]
+      .filter(([, v]) => v && v.obs && v.obs.raw)
+      .sort((a, b) => (b[1].at || 0) - (a[1].at || 0))
+      .slice(0, 80);
+    const obj = {};
+    rows.forEach(([id, v]) => { obj[id] = v; });
+    try { localStorage.setItem("twofly-wx", JSON.stringify(obj)); } catch {}
   }
 
   async function loadWx(ap, force, slot) {
     slot = slot || "dep";
-    const box = $(slot === "arr" ? "#wx-arr-body" : "#wx-body");
+    const gen = ++wxGen[slot];
     if (!ap) {
       renderWxBody(null, null, false, slot);
       return;
     }
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      wxOfflineFlag = true;
-      renderWxBody(ap, null, { offline: true }, slot);
-      return;
-    }
-    if (box) box.innerHTML = `<p class="muted">RETRIEVING OBSERVATION.</p>`;
     const key = ap.id;
     const hit = wxCache.get(key);
-    if (!force && hit && Date.now() - hit.at < 5 * 60 * 1000) {
+    if (!force && hit && hit.obs) {
       renderWxBody(ap, hit.obs, false, slot);
       return;
     }
+    if (typeof navigator !== "undefined" && navigator.onLine === false) {
+      wxOfflineFlag = true;
+      if (hit && hit.obs) renderWxBody(ap, hit.obs, false, slot);
+      else renderWxBody(ap, null, { offline: true }, slot);
+      return;
+    }
+    if (!hit) {
+      const box = $(slot === "arr" ? "#wx-arr-body" : "#wx-body");
+      if (box) box.innerHTML = `<p class="muted">RETRIEVING OBSERVATION.</p>`;
+    }
     try {
-      const obs = await observationFor(ap);
+      const obs = await observationFor(ap, !!force);
+      if (wxGen[slot] !== gen) return;
       wxCache.set(key, { at: Date.now(), obs });
+      saveWxStore();
       renderWxBody(ap, obs, false, slot);
     } catch (e) {
-      renderWxBody(ap, null, e && e.offline ? e : true, slot);
+      if (wxGen[slot] !== gen) return;
+      if (hit && hit.obs) renderWxBody(ap, hit.obs, false, slot);
+      else renderWxBody(ap, null, e && e.offline ? e : true, slot);
     }
   }
 
@@ -1403,9 +2507,9 @@
 
   function ttsBits(acId) {
     if (!acId || !state.profile.serviceOn) return "";
-    if (needsService(acId)) return `<span class="svc-due">SERVICE DUE</span>`;
     const left = Math.max(0, SERVICE_HRS - sinceService(acId));
-    return `<span>TTS ${left.toFixed(1)} HR</span>`;
+    const dead = healthPct(acId) <= 0;
+    return `<span>TTS ${left.toFixed(1)} HR</span>${healthHtml(acId)}${dead ? `<span class="svc-due">GROUNDED</span>` : ""}`;
   }
 
   function icaoJump(ap) {
@@ -1426,20 +2530,25 @@
     await Promise.all(
       uniq.map(async (ap) => {
         const hit = wxCache.get(ap.id);
-        if (hit && Date.now() - hit.at < 5 * 60 * 1000) return;
+        if (hit && hit.obs) return;
         try {
           const obs = await observationFor(ap);
           wxCache.set(ap.id, { at: Date.now(), obs });
         } catch {}
       })
     );
+    refreshBriefs(list);
+    if (state.active) refreshBriefs([state.active]);
     renderMissions();
     if (state.active && state.active.dest) loadWx(state.active.dest, false, "arr");
     else if (list[0] && list[0].dest) loadWx(list[0].dest, false, "arr");
   }
 
   function setAirports(list) {
-    airports = (list || []).filter((a) => a && a.id);
+    const pads = Array.isArray(window.TWOFY_HELIPADS) ? window.TWOFY_HELIPADS : [];
+    const seen = new Set((list || []).map((a) => a && a.id).filter(Boolean));
+    const extra = pads.filter((p) => p && p.id && !seen.has(p.id));
+    airports = (list || []).filter((a) => a && a.id).concat(extra);
     byId = new Map(airports.map((a) => [a.id, a]));
     const saved = (() => { try { return localStorage.getItem("twofly-dep"); } catch (e) { return ""; } })();
     if (!state.dep || !byId.get(state.dep.id)) {
@@ -1448,22 +2557,27 @@
       state.dep = byId.get(state.dep.id) || state.dep;
     }
     const n = $("#field-count");
-    if (n) n.textContent = airports.length.toLocaleString() + " AIRFIELDS ON FILE";
+    if (n) n.textContent = "";
     try { renderDep(); } catch (e) {}
     try { renderHome(); } catch (e) {}
+    try {
+      const flown = (state.log || []).filter((m) => m.flown && !m.crashed);
+      if (flown.length) mergeUnlocks(unlocksFromFlown(flown));
+      renderBook();
+    } catch (e) {}
   }
 
   function loadAirports() {
     const n = $("#field-count");
-    if (n && !airports.length) n.textContent = "LOADING AIRFIELDS…";
+    if (n && !airports.length) n.textContent = "";
     return fetch("airports.json?v=" + VERSION, { cache: "no-store" })
       .then(function (r) { return r.ok ? r.json() : []; })
       .then(function (data) {
         if (Array.isArray(data) && data.length) setAirports(data);
-        else if (n) n.textContent = "0 AIRFIELDS ON FILE";
+        else if (n) n.textContent = "";
       })
       .catch(function () {
-        if (n && !airports.length) n.textContent = "AIRFIELDS FAILED TO LOAD";
+        if (n && !airports.length) n.textContent = "";
       });
   }
 
@@ -1507,7 +2621,7 @@
           if (haversineNm(ap, lm) <= 20) marks.add(lm.id);
         });
         CITIES.forEach((ct) => {
-          if (haversineNm(ap, ct) <= 30) cities.add(ct.id);
+          if (cityHitsAirport(ap, ct)) cities.add(ct.id);
         });
         PORTS.forEach((pt) => {
           if (airportHitsPort(ap, pt)) ports.add(pt.id);
@@ -1518,13 +2632,30 @@
   }
 
   function portKeys(pt) {
-    return new Set([pt.id, pt.icao, ...(pt.aliases || [])].filter(Boolean).map((s) => String(s).toUpperCase()));
+    return new Set(
+      [pt.id, pt.icao, pt.iata, ...(pt.aliases || [])]
+        .filter(Boolean)
+        .map((s) => String(s).toUpperCase())
+    );
   }
 
   function airportHitsPort(ap, pt) {
     if (!ap || !pt) return false;
     const keys = portKeys(pt);
-    return keys.has(String(ap.id || "").toUpperCase()) || keys.has(String(ap.icao || "").toUpperCase());
+    const id = String(ap.id || ap.icao || "").toUpperCase();
+    const iata = String(ap.iata || "").toUpperCase();
+    if (id && keys.has(id)) return true;
+    if (iata && keys.has(iata)) return true;
+    if (pt.lat != null && ap.lat != null && haversineNm(ap, pt) <= 3) return true;
+    return false;
+  }
+
+  function cityHitsAirport(ap, ct) {
+    if (!ap || !ct) return false;
+    if (ap.lat != null && ct.lat != null && haversineNm(ap, ct) <= 35) return true;
+    const city = String(ap.c || "").trim().toLowerCase();
+    const name = String(ct.n || "").trim().toLowerCase();
+    return !!(city && name && (city === name || city.startsWith(name + " ") || name.startsWith(city + " ")));
   }
 
   function localDayKey(iso) {
@@ -1609,6 +2740,7 @@
     const mvfrPlus = flown.filter((m) => ["MVFR", "IFR", "LIFR"].includes(m.wxCat || m.arrCat)).length;
     const windy = flown.some((m) => (m.windKt || 0) >= 20);
     const bushN = flown.filter((m) => m.type === "bush").length;
+    const medN = flown.filter((m) => m.type === "medevac").length;
     const vintageN = flown.filter((m) => {
       const ac = AIRCRAFT.find((a) => a.id === m.ac);
       return ac && ac.cls === "vintage";
@@ -1647,6 +2779,19 @@
     const high = flown.filter((m) => (m.dest && m.dest.el || 0) >= 5000).length;
     const longLeg = flown.filter((m) => (m.dist || 0) >= 300).length;
     const veryLong = flown.some((m) => (m.dist || 0) >= 800);
+    const butter = flown.filter((m) => m.landing === "BUTTER").length;
+    const aPlus = flown.filter((m) => m.grade === "A" || m.grade === "S").length;
+    let cleanRun = 0;
+    for (const leg of flown) {
+      if (leg.crashed || (leg.ops != null && leg.ops < 15)) break;
+      if (leg.grade) cleanRun += 1;
+    }
+    const heavyA = flown.some((m) => {
+      if (m.grade !== "A" && m.grade !== "S") return false;
+      const ship = AIRCRAFT.find((a) => a.id === m.ac);
+      return ship && (ship.cls === "jet" || ship.cls === "airliner");
+    });
+    const goArounds = flown.filter((m) => m.goAround && !m.crashed).length;
 
     const row = (id, cat, label, info, cur, max, hidden) => {
       const n = Number(cur) || 0;
@@ -1665,6 +2810,12 @@
       row("hours100", "PILOT", "EXPERIENCED PILOT", "Log one hundred flight hours.", hours, 100),
       row("busy", "PILOT", "THREE THIS DATE", "Log three completed sorties on the same calendar date.", todayFlights.length, 3),
       row("session", "PILOT", "JUST ONE MORE", "Complete five taskings in this session.", sessionFlights, 5),
+      row("butter10", "PILOT", "GREASED IT", "Log ten butter landings.", butter, 10),
+      row("pro25", "PILOT", "PROFESSIONAL", "Complete twenty-five sorties rated A or S.", aPlus, 25),
+      row("clean10", "PILOT", "CLEAN RECORD", "Ten rated sorties in a row with no crash and no operations deduction.", cleanRun, 10),
+      row("heavyA", "PILOT", "HEAVY METAL", "Finish a jet or airliner sortie at A or S.", heavyA ? 1 : 0, 1),
+      row("rough3", "PILOT", "ROUGH DAY", "Three hard, rough, or critical landings in this session.", sessionHard, 3),
+      row("around", "PILOT", "GO AROUND", "Go around, then land and complete the sortie.", goArounds, 1),
       row("early", "PILOT", "EARLY BIRD", "Complete a tasking before 07:00 local.", early ? 1 : 0, 1),
       row("night", "PILOT", "NIGHT OWL", "Complete a tasking at or after 22:00 local.", late ? 1 : 0, 1),
       row("weekend", "PILOT", "WEEKEND WARRIOR", "Complete ten taskings on a Saturday or Sunday.", weekendN, 10),
@@ -1672,9 +2823,10 @@
       row("home", "PILOT", "HOME AGAIN", "Complete a tasking that lands at your home field.", toHome, 1),
       row("fromhome", "PILOT", "NO PLACE LIKE HOME", "Complete twenty-five taskings from your home field.", fromHome, 25),
 
-      row("priv", "CERTIFICATE", "PRIVATE PILOT", "Reach the Private Pilot certificate.", lic.n >= 2 ? 1 : 0, 1),
-      row("comm", "CERTIFICATE", "COMMERCIAL PILOT", "Reach the Commercial Pilot certificate.", lic.n >= 3 ? 1 : 0, 1),
-      row("atp", "CERTIFICATE", "AIRLINE TRANSPORT PILOT", "Reach ATP.", lic.n >= 4 ? 1 : 0, 1),
+      row("priv", "CERTIFICATE", "PRIVATE PILOT", "Earn the Private Pilot certificate.", lic.n >= 2 ? 1 : 0, 1),
+      row("inst", "CERTIFICATE", "INSTRUMENT RATING", "Earn the Instrument Rating.", lic.n >= 3 ? 1 : 0, 1),
+      row("comm", "CERTIFICATE", "COMMERCIAL PILOT", "Earn the Commercial Pilot certificate.", lic.n >= 4 ? 1 : 0, 1),
+      row("atp", "CERTIFICATE", "AIRLINE TRANSPORT PILOT", "Earn ATP.", lic.n >= 5 ? 1 : 0, 1),
 
       row("pay", "CAREER", "FIRST PAYCHECK", "Earn $10,000 from completed taskings.", earned, 10000),
       row("living", "CAREER", "MAKING A LIVING", "Earn $100,000 from completed taskings.", earned, 100000),
@@ -1714,14 +2866,15 @@
       row("wx10", "WEATHER", "WEATHER DOESN’T CARE", "Complete ten flights in MVFR or worse.", mvfrPlus, 10),
       row("cross", "WEATHER", "CROSSWIND", "Complete a flight with reported wind of 20 knots or more.", windy ? 1 : 0, 1),
 
-      row("fo", "AIRLINE", "FIRST OFFICER", "Complete your first Airline Mode tasking.", airline.length, 1),
-      row("rev10", "AIRLINE", "REVENUE SERVICE", "Complete ten airline flights.", airline.length, 10),
-      row("rev50", "AIRLINE", "SCHEDULED SERVICE", "Complete fifty airline flights.", airline.length, 50),
-      row("alhome", "AIRLINE", "HOME BASE", "Complete twenty-five airline flights from your home field.", airlineFromHome, 25),
-      row("routes", "AIRLINE", "ROUTE NETWORK", "Fly to twenty-five different destinations in Airline Mode.", airlineDest.size, 25),
-      row("alfleet", "AIRLINE", "FLEET IN SERVICE", "Complete airline taskings in five different aircraft.", airlineAc.size, 5),
+      row("fo", "CAREER", "FIRST OFFICER", "Complete your first Career Mode tasking.", airline.length, 1),
+      row("rev10", "CAREER", "REVENUE SERVICE", "Complete ten career flights.", airline.length, 10),
+      row("rev50", "CAREER", "SCHEDULED SERVICE", "Complete fifty career flights.", airline.length, 50),
+      row("alhome", "CAREER", "HOME BASE", "Complete twenty-five career flights from your home field.", airlineFromHome, 25),
+      row("routes", "CAREER", "ROUTE NETWORK", "Fly to twenty-five different destinations in Career Mode.", airlineDest.size, 25),
+      row("alfleet", "CAREER", "FLEET IN SERVICE", "Complete career taskings in five different aircraft.", airlineAc.size, 5),
 
       row("bush10", "BUSH", "BUSH PILOT", "Complete ten field-resupply taskings.", bushN, 10),
+      row("med5", "MEDEVAC", "AIR AMBULANCE", "Complete five medevac taskings.", medN, 5),
       row("soft", "BUSH", "UNPAVED DEST", "Complete a tasking to an unpaved destination.", unpaved, 1),
       row("high", "BUSH", "HIGH ELEVATION", "Land at a destination 5,000 feet MSL or higher.", high, 1),
       row("short", "BUSH", "NO RUNWAY REQUIRED", "Complete a tasking to a strip under 2,500 feet.", shortStrip ? 1 : 0, 1),
@@ -1768,6 +2921,46 @@
       if (title) title.textContent = "CLEAR ALL PROGRESS";
       if (copy) copy.textContent = "THIS PERMANENTLY ERASES THE PILOT FILE, HANGAR, MONEY, XP, CERTIFICATES, SORTIE LOG, COLLECTABLES, AND ACTIVE TASKINGS ON THIS INSTALLATION. EXPORT A BACKUP FIRST IF YOU WANT TO KEEP THEM. THIS CANNOT BE UNDONE.";
       if (yes) yes.textContent = "CLEAR ALL";
+    } else if (kind === "lease") {
+      const ac = AIRCRAFT.find((a) => a.id === state.pendingLease);
+      const name = ac ? ac.name : "AIRCRAFT";
+      const day = ac ? leaseRate(ac) : 0;
+      if (title) title.textContent = "LEASE " + name.toUpperCase();
+      if (copy) copy.textContent = ac
+        ? `${name} leases for ${moneyFmt(day)} a day. Daily payments count toward the list price. Buy it out whenever you want for whatever is left. Returning it is free — you just forfeit what you have already paid. The first day is due when you confirm.`
+        : "LEASE THIS AIRFRAME.";
+      if (yes) yes.textContent = "LEASE";
+    } else if (kind === "buyout") {
+      const ac = AIRCRAFT.find((a) => a.id === state.pendingBuyout);
+      const name = ac ? ac.name : "AIRCRAFT";
+      const remain = state.pendingBuyout ? leaseBuyout(state.pendingBuyout) : 0;
+      const paid = state.pendingBuyout ? leasePaid(state.pendingBuyout) : 0;
+      if (title) title.textContent = "BUY OUT " + name.toUpperCase();
+      if (copy) copy.textContent = remain
+        ? `You have already paid ${moneyFmt(paid)} on this lease. Pay the remaining ${moneyFmt(remain)} and the airframe is yours.`
+        : `Lease payments have covered the list price. Confirm to take ownership.`;
+      if (yes) yes.textContent = remain ? "PAY " + moneyFmt(remain) : "OWN";
+    } else if (kind === "ifr-accept") {
+      const m = state.pendingAccept;
+      const fine = ifrFine(m);
+      const where = isImc(wxCatOf(m && m.dest)) ? "Destination" : "Departure";
+      const cat = isImc(wxCatOf(m && m.dest)) ? wxCatOf(m.dest) : wxCatOf(m && m.dep);
+      if (title) title.textContent = "IFR WITHOUT RATING";
+      if (copy) copy.textContent = `${where} is ${cat}. You do not hold an Instrument Rating. You can still accept. Completing this sortie posts Illegal IFR Operation −${fine.xp} XP and Safety violation −${moneyFmt(fine.money)}. The rating removes those penalties. A checkride is on the Career page.`;
+      if (yes) yes.textContent = "ACCEPT ANYWAY";
+    } else if (kind === "ifr-complete") {
+      const m = state.active;
+      const fine = ifrFine(m);
+      if (title) title.textContent = "IFR WITHOUT RATING";
+      if (copy) copy.textContent = `This sortie is IFR or LIFR and you do not hold an Instrument Rating. Completing posts Illegal IFR Operation −${fine.xp} XP and Safety violation −${moneyFmt(fine.money)}.`;
+      if (yes) yes.textContent = "COMPLETE ANYWAY";
+    } else if (kind === "ifr-check") {
+      const fee = ifrFee();
+      if (title) title.textContent = "INSTRUMENT CHECKRIDE";
+      if (copy) copy.textContent = fee
+        ? `Written checkride. Four of five to pass. The fee of ${moneyFmt(fee)} is charged only if you pass. Pass grants the Instrument Rating now. Private certificate required.`
+        : `Written checkride. Four of five to pass. Money is off, so there is no fee. Pass grants the Instrument Rating now.`;
+      if (yes) yes.textContent = "BEGIN";
     } else {
       if (title) title.textContent = "CLEAR SORTIE LOG";
       if (copy) copy.textContent = "THIS ERASES THE SORTIE LOG ON THIS INSTALLATION. COLLECTABLES ARE NOT AFFECTED. THE ACTIVE SORTIE IS NOT CLEARED.";
@@ -1779,10 +2972,16 @@
   function acceptMission(m) {
     if (state.active) return;
     const acId = m.ac || (state.ac && state.ac.id);
-    if (acId && needsService(acId)) return;
+    if (acId && serviceBlocks(acId)) return;
+    if (ifrIllegal(m) && !m.ifrAck) {
+      state.pendingAccept = m;
+      openConfirm("ifr-accept");
+      return;
+    }
     setActive({ ...m, acceptedAt: new Date().toISOString(), mode: m.mode || state.mode });
     setMissions((state.missions || []).filter((x) => x.id !== m.id));
     sfx("accept");
+    simResetWatch();
     renderActive();
     renderMissions();
     if (m.dest) loadWx(m.dest, false, "arr");
@@ -1794,12 +2993,74 @@
     st.clean = 0;
     saveProfile();
     sfx("abort");
+    simResetWatch();
     setActive(null);
     renderActive();
     renderMissions();
     renderRank();
     if (state.missions[0] && state.missions[0].dest) loadWx(state.missions[0].dest, false, "arr");
     else loadWx(null, false, "arr");
+  }
+
+  function yn(v) {
+    return v ? "yes" : "no";
+  }
+
+  function writeSortieReport(m, info) {
+    const s = simSnap || {};
+    const L = simLatch || {};
+    const dep = icaoOf(m && m.dep) || "DEP";
+    const dest = icaoOf(m && m.dest) || "DEST";
+    const ac = AIRCRAFT.find((a) => a.id === (m && m.ac)) || state.ac || {};
+    const crashed = !!(info && info.crashed);
+    const why = s.crashWhy || L.crashWhy || "";
+    const fpm = (s.hasFpm || L.hasFpm) ? (s.hasFpm ? s.touchFpm : L.touchFpm) : null;
+    const lines = [
+      "TWOFLY SORTIE REPORT",
+      "Recorded " + new Date().toISOString(),
+      "",
+      "SORTIE",
+      "Mode: " + ((m && m.mode) === "airline" ? "Career" : "Free Flight"),
+      "Aircraft: " + (ac.name || m.ac || ""),
+      "Route: " + dep + " to " + dest,
+      "Counted as a crash: " + yn(crashed),
+      "Airframe wear applied: " + yn(careerWear(m)),
+      "",
+      "SIMCONNECT",
+      "Connected: " + yn(s.connected),
+      "On ground: " + (s.onGround == null ? "unknown" : yn(s.onGround)),
+      "Airborne: " + yn(s.airborne),
+      "Landing logged: " + yn(s.landed || L.landAt),
+      "Landing time: " + (s.landAt || L.landAt || "none"),
+      "Crash flag: " + yn(s.crashed || L.crashed),
+      "Crash reason: " + (why || "none"),
+      "Touchdown rate: " + (fpm == null ? "not recorded" : fpm + " fpm"),
+      "Touchdown speed: " + ((s.hasFpm || L.hasFpm) ? ((s.touchIas || L.touchIas || 0) + " kt") : "not recorded"),
+      "Touchdown G: " + ((s.hasFpm || L.hasFpm) ? String(s.touchG || L.touchG || 0) : "not recorded"),
+      "Lowest vertical speed while airborne: " + ((s.minVs || L.minVs || 0) + " fpm"),
+      "Highest G while airborne: " + String(s.peakG || L.peakG || s.maxG || L.maxG || 0),
+      "Bank at last sample: " + ((s.bank || 0) + " deg"),
+      "Max bank: " + ((s.maxBank || L.maxBank || 0) + " deg"),
+      "Overbank past 70: " + yn(s.overbank || L.overbank),
+      "Go-around: " + yn(s.goAround || L.goAround),
+      "Bounce: " + yn(s.bounce || L.bounce),
+      "Max indicated speed: " + ((s.maxIas || L.maxIas || 0) + " kt"),
+      "Landing position: " + ((s.hasPos || L.hasPos) ? ((s.landLat || L.landLat) + ", " + (s.landLon || L.landLon)) : "none"),
+      "Tail: " + (s.atcId || "none"),
+      "Callsign: " + (s.callsign || "none"),
+      "Sim error: " + (s.err || "none"),
+      "",
+      "A crash is only the simulator crash event, a touchdown of 2200 fpm or steeper, or 5 G combined with a hard touchdown.",
+      "A descent, a turn, or a wing-low landing is not a crash.",
+      "Wear and flight hours apply only in Career, and only to an aircraft you own.",
+    ];
+    const stamp = new Date().toISOString().replace(/[:.]/g, "").slice(0, 15);
+    const name = stamp + "-" + dep + "-" + dest + ".txt";
+    fetch("/__twofly/report", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, text: lines.join("\r\n") + "\r\n" }),
+    }).catch(() => {});
   }
 
   function completeMission() {
@@ -1812,10 +3073,45 @@
       cities: new Set(state.collection.cities || []),
       ports: new Set(state.collection.ports || []),
     };
-    const now = Date.now();
-    const bonus = earlyBonus(m, now);
+    const now = scoreNow();
+    const beforeN = licenseFor(state.profile.xp).n;
+    const crashed = !!(state.profile.simWatch && simSnap && simSnap.crashed);
+    let penalty = latePenalty(m, now);
+    let bonus = penalty ? 0 : earlyBonus(m, now);
+    let ifrMoney = 0;
+    let ifrXp = 0;
+    if (!crashed && ifrIllegal(m)) {
+      const fine = ifrFine(m);
+      ifrMoney = state.profile.moneyOn === false ? 0 : fine.money;
+      ifrXp = fine.xp;
+    }
+    if (crashed) {
+      bonus = 0;
+      penalty = m.money || 0;
+      ifrMoney = 0;
+      ifrXp = 0;
+    }
+    const score = simLive() || (simSnap && simSnap.landed)
+      ? sortieScore(m, now, {
+          crashed,
+          overbank: !!(simSnap && simSnap.overbank),
+          simLand: !!(simSnap && simSnap.landed),
+          hasFpm: !!(simSnap && simSnap.hasFpm),
+          touchFpm: simSnap && simSnap.touchFpm,
+          hasPos: !!(simSnap && simSnap.hasPos),
+          landLat: simSnap && simSnap.landLat,
+          landLon: simSnap && simSnap.landLon,
+        })
+      : null;
     try {
-      markFlown(m, bonus);
+      markFlown(m, bonus, penalty, {
+        crashed,
+        overbank: !!(simSnap && simSnap.overbank),
+        simLand: !!(simSnap && simSnap.landed),
+        score,
+        ifrMoney,
+        ifrXp,
+      });
     } catch (err) {
       console.error(err);
     }
@@ -1842,13 +3138,157 @@
     try {
       const afterHave = badges().list.filter((b) => b.have);
       newAch = afterHave.filter((b) => !beforeHave.includes(b.id));
+      if (!crashed && newAch.length) {
+        const stAch = pilotStats();
+        stAch.achAt = stAch.achAt && typeof stAch.achAt === "object" ? stAch.achAt : {};
+        const t0 = Date.now();
+        newAch.forEach((b, i) => { stAch.achAt[b.id] = t0 + i + 1; });
+      }
     } catch (e) {}
+    const afterN = licenseFor(state.profile.xp).n;
+    const achPay = grantAchPay(newAch, crashed);
+    const afterPayN = licenseFor(state.profile.xp).n;
+    const certs = grantLicenseAwards(beforeN, Math.max(afterN, afterPayN), crashed);
+    splashQueue = [];
+    if (!crashed && certs.length) certs.forEach((L) => splashQueue.push({ kind: "cert", lic: L }));
     showDebrief({
       m,
       bonus,
-      unlocked,
-      newAch,
+      penalty,
+      ifrMoney,
+      ifrXp,
+      unlocked: crashed ? [] : unlocked,
+      newAch: crashed ? [] : newAch,
+      achPay,
+      crashed,
+      overbank: !!(simSnap && simSnap.overbank),
+      simLand: !!(simSnap && simSnap.landed),
+      score,
     });
+    writeSortieReport(m, { crashed, score });
+  }
+
+  let simSnap = { connected: false };
+  let simLatch = { crashed: false, crashWhy: "", overbank: false, landAt: "", hasFpm: false, touchFpm: 0, touchIas: 0, touchG: 0, bounce: false, goAround: false, maxG: 0, maxIas: 0, minVs: 0, peakG: 0, maxBank: 0, hasPos: false, landLat: 0, landLon: 0 };
+
+  function noteSimLatch() {
+    if (simSnap.crashed) simLatch.crashed = true;
+    if (simSnap.crashWhy) simLatch.crashWhy = simSnap.crashWhy;
+    if (simSnap.overbank) simLatch.overbank = true;
+    if (simSnap.landAt) simLatch.landAt = simSnap.landAt;
+    if (simSnap.hasFpm) {
+      simLatch.hasFpm = true;
+      simLatch.touchFpm = simSnap.touchFpm;
+      simLatch.touchIas = simSnap.touchIas || 0;
+      simLatch.touchG = simSnap.touchG || 0;
+    }
+    if (simSnap.bounce) simLatch.bounce = true;
+    if (simSnap.goAround) simLatch.goAround = true;
+    if ((simSnap.maxG || 0) > simLatch.maxG) simLatch.maxG = simSnap.maxG;
+    if ((simSnap.maxIas || 0) > simLatch.maxIas) simLatch.maxIas = simSnap.maxIas;
+    if (typeof simSnap.minVs === "number" && simSnap.minVs < (simLatch.minVs || 0)) simLatch.minVs = simSnap.minVs;
+    if ((simSnap.peakG || 0) > (simLatch.peakG || 0)) simLatch.peakG = simSnap.peakG;
+    if ((simSnap.maxBank || 0) > (simLatch.maxBank || 0)) simLatch.maxBank = simSnap.maxBank;
+    if (simSnap.hasPos) {
+      simLatch.hasPos = true;
+      simLatch.landLat = simSnap.landLat;
+      simLatch.landLon = simSnap.landLon;
+    }
+  }
+
+  function scoreNow() {
+    if (state.profile && state.profile.simWatch && simSnap && simSnap.landAt) {
+      const t = Date.parse(simSnap.landAt);
+      if (Number.isFinite(t)) return t;
+    }
+    return Date.now();
+  }
+
+  async function pollSim() {
+    try {
+      const r = await fetch("/__twofly/sim", { cache: "no-store" });
+      if (!r.ok) {
+        simSnap = { ...simSnap, connected: false };
+        return;
+      }
+      const next = await r.json();
+      if (simLatch.crashed) next.crashed = true;
+      if (!next.crashWhy && simLatch.crashWhy) next.crashWhy = simLatch.crashWhy;
+      if (simLatch.overbank) next.overbank = true;
+      if (!next.landAt && simLatch.landAt) next.landAt = simLatch.landAt;
+      if (simLatch.hasFpm && !next.hasFpm) {
+        next.hasFpm = true;
+        next.touchFpm = simLatch.touchFpm;
+        next.touchIas = simLatch.touchIas;
+        next.touchG = simLatch.touchG;
+      }
+      if (simLatch.bounce) next.bounce = true;
+      if (simLatch.goAround) next.goAround = true;
+      if ((simLatch.maxG || 0) > (next.maxG || 0)) next.maxG = simLatch.maxG;
+      if ((simLatch.maxIas || 0) > (next.maxIas || 0)) next.maxIas = simLatch.maxIas;
+      if ((simLatch.minVs || 0) < (next.minVs || 0)) next.minVs = simLatch.minVs;
+      if ((simLatch.peakG || 0) > (next.peakG || 0)) next.peakG = simLatch.peakG;
+      if ((simLatch.maxBank || 0) > (next.maxBank || 0)) next.maxBank = simLatch.maxBank;
+      if (simLatch.hasPos && !next.hasPos) {
+        next.hasPos = true;
+        next.landLat = simLatch.landLat;
+        next.landLon = simLatch.landLon;
+      }
+      simSnap = next;
+      noteSimLatch();
+    } catch (e) {
+      simSnap = { ...simSnap, connected: false };
+    }
+  }
+
+  function simResetWatch() {
+    simLatch = { crashed: false, crashWhy: "", overbank: false, landAt: "", hasFpm: false, touchFpm: 0, touchIas: 0, touchG: 0, bounce: false, goAround: false, maxG: 0, maxIas: 0, minVs: 0, peakG: 0, maxBank: 0, hasPos: false, landLat: 0, landLon: 0 };
+    simSnap = { connected: !!simSnap.connected, atcId: simSnap.atcId || "" };
+    fetch("/__twofly/sim", { method: "POST", cache: "no-store" }).catch(function () {});
+  }
+
+  function simLiveBits() {
+    if (!simSnap.connected) return { off: true };
+    return {
+      bank: Math.round(simSnap.bank || 0),
+      air: !!simSnap.airborne,
+      ground: simSnap.onGround !== false && !simSnap.airborne,
+    };
+  }
+
+  function simStatusLine() {
+    if (!simSnap.connected) return `<p class="muted">SIM OFFLINE</p>`;
+    return `<p class="muted">SIM LIVE · ${simSnap.airborne ? "AIRBORNE" : "ON GROUND"}</p>`;
+  }
+
+  function paintSimLine() {
+    const el = $("#sim-line");
+    if (!el) return;
+    el.hidden = false;
+    el.classList.toggle("off", !simSnap.connected);
+    if (!simSnap.connected) {
+      el.textContent = "SIM OFFLINE";
+      return;
+    }
+    el.innerHTML = `<span class="sim-live"><i></i> SIM LIVE · ${simSnap.airborne ? "AIRBORNE" : "ON GROUND"}</span>`;
+  }
+
+  function isTimed(m) {
+    return m && (m.type === "express" || m.type === "vip" || m.type === "medevac");
+  }
+
+  function latePenalty(m, now) {
+    if (!m || (m.mode || state.mode) !== "airline") return 0;
+    if (!isTimed(m) || !m.arrTime) return 0;
+    const arr = new Date(m.arrTime).getTime();
+    if (!Number.isFinite(arr)) return 0;
+    const lateMin = (now - arr) / 60000;
+    const grace = 15;
+    if (lateMin <= grace) return 0;
+    const over = lateMin - grace;
+    const cap = m.type === "express" ? 0.5 : 0.35;
+    const frac = Math.min(cap, 0.1 + over * 0.01);
+    return Math.max(0, Math.round((m.money || 0) * frac / 5) * 5);
   }
 
   function earlyBonus(m, now) {
@@ -1862,6 +3302,264 @@
     return Math.max(0, Math.min(fromTime, cap || fromTime));
   }
 
+  function simLive() {
+    return !!(state.profile && state.profile.simWatch && simSnap && simSnap.connected);
+  }
+
+  function landBands(cls) {
+    if (cls === "jet" || cls === "airliner") return [180, 360, 550, 800, 1100];
+    if (cls === "turboprop") return [160, 320, 520, 750, 1000];
+    if (cls === "helo" || cls === "evtol") return [80, 180, 350, 550, 800];
+    return [150, 300, 500, 700, 1000];
+  }
+
+  function landingCall(down, cls) {
+    const bands = landBands(cls);
+    const words = ["BUTTER", "SMOOTH", "FIRM", "HARD", "ROUGH", "CRITICAL"];
+    const pts = [30, 27, 22, 14, 8, 3];
+    let i = bands.findIndex((n) => down <= n);
+    if (i < 0) i = 5;
+    return { down, word: words[i], pts: pts[i] };
+  }
+
+  function fieldRadiusNm(ap) {
+    if (!ap) return 1.5;
+    if (fieldKind(ap) === "helipad") return 0.8;
+    const rw = ap.rw || 0;
+    const half = rw > 0 ? rw / 6076 / 2 : 0;
+    return Math.min(4, Math.max(1.5, half + 1.2));
+  }
+
+  function landingPlace(lat, lon, dest) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (Math.abs(lat) < 0.01 && Math.abs(lon) < 0.01) return null;
+    const here = { lat, lon };
+    const destAp = airportOf(dest);
+    if (destAp && Number.isFinite(destAp.lat) && Number.isFinite(destAp.lon)) {
+      const d = haversineNm(here, destAp);
+      if (d <= fieldRadiusNm(destAp)) return { ap: destAp, d, match: true };
+    }
+    let best = null;
+    let bestD = 8;
+    for (let i = 0; i < airports.length; i++) {
+      const a = airports[i];
+      if (!Number.isFinite(a.lat) || !Number.isFinite(a.lon)) continue;
+      const d = haversineNm(here, a);
+      if (d < bestD) {
+        bestD = d;
+        best = a;
+      }
+    }
+    return { ap: best, d: best ? bestD : null, match: !!(best && destAp && best.id === destAp.id) };
+  }
+
+  function letterFor(pts) {
+    if (pts >= 95) return { letter: "S", title: "EXCEPTIONAL SORTIE" };
+    if (pts >= 90) return { letter: "A", title: "EXCELLENT SORTIE" };
+    if (pts >= 80) return { letter: "B", title: "GOOD SORTIE" };
+    if (pts >= 70) return { letter: "C", title: "ACCEPTABLE SORTIE" };
+    if (pts >= 60) return { letter: "D", title: "POOR SORTIE" };
+    return { letter: "F", title: "FAILED SORTIE" };
+  }
+
+  function sortieScore(m, now, flags) {
+    flags = flags || {};
+    if (!(simLive() || flags.simLand)) return null;
+    const crashed = !!flags.crashed;
+    const ac = AIRCRAFT.find((a) => a.id === (m && m.ac)) || state.ac || {};
+    const notes = [];
+    if (crashed) {
+      const fail = letterFor(0);
+      return {
+        pts: 0,
+        letter: "F",
+        title: fail.title,
+        tone: "rough",
+        grade: "F",
+        landing: null,
+        goAround: false,
+        ops: 0,
+        cats: [
+          { k: "MISSION", have: 0, max: 25 },
+          { k: "LANDING", have: 0, max: 30 },
+          { k: "HANDLING", have: 0, max: 20 },
+          { k: "OPERATIONS", have: 0, max: 15 },
+          { k: "EFFICIENCY", have: 0, max: 10 },
+        ],
+        notes: ["Crash logged" + (simSnap && simSnap.crashWhy ? " (" + simSnap.crashWhy + ")" : "") + ". The sortie is a fail. Pay and collectables did not post."],
+        watch: true,
+      };
+    }
+    let mission = 15;
+    if (!flags.simLand) {
+      notes.push("Complete was pressed before the sim logged a landing.");
+    } else if (flags.hasPos || (simSnap && simSnap.hasPos)) {
+      const lat = Number(flags.landLat != null ? flags.landLat : simSnap.landLat);
+      const lon = Number(flags.landLon != null ? flags.landLon : simSnap.landLon);
+      const place = landingPlace(lat, lon, m && m.dest);
+      const planned = airportOf(m && m.dest);
+      const planId = planned && planned.id ? planned.id : "the planned field";
+      if (place && place.match) {
+        mission = 25;
+        notes.push(`Landed at ${place.ap.id}.`);
+      } else if (place && place.ap) {
+        mission = 12;
+        notes.push(`Landed at ${place.ap.id}, not ${planId}. The sortie still counts.`);
+      } else {
+        mission = 12;
+        notes.push(`The landing was not at ${planId}. The sortie still counts.`);
+      }
+    } else {
+      mission = 20;
+      notes.push("Landing logged. Position was not recorded, so the field was not checked.");
+    }
+    let landing = null;
+    let landPts = flags.simLand ? 18 : 8;
+    if (flags.simLand && flags.hasFpm) {
+      const down = Math.max(0, Math.round(-Math.min(0, Number(flags.touchFpm) || 0)));
+      landing = landingCall(down, ac.cls);
+      landPts = landing.pts;
+      if (flags.bounce || (simSnap && simSnap.bounce)) {
+        landPts = Math.max(0, landPts - 4);
+        notes.push("Bounce after touchdown.");
+      }
+      const speed = Number(flags.touchIas || (simSnap && simSnap.touchIas) || 0);
+      notes.push(`Touchdown ${down} ft/min${speed ? ", " + Math.round(speed) + " knots" : ""}. ${landing.word.charAt(0) + landing.word.slice(1).toLowerCase()} for this class.`);
+    } else if (flags.simLand) {
+      notes.push("Landing rate was not recorded.");
+    }
+    if (flags.goAround || (simSnap && simSnap.goAround)) {
+      notes.push("Go-around, then a landing. That did not cost points.");
+    }
+    let handling = 20;
+    if (flags.overbank) {
+      handling -= 8;
+      notes.push("Bank went past 70°.");
+    }
+    const maxG = Number(flags.maxG || (simSnap && simSnap.maxG) || 0);
+    if (maxG >= 2.5) {
+      handling -= 4;
+      notes.push(`Peak load ${maxG.toFixed(1)} G.`);
+    }
+    const maxIas = Number(flags.maxIas || (simSnap && simSnap.maxIas) || 0);
+    const cruise = ac.cruise || 0;
+    const fast = cruise && maxIas > (ac.cls === "jet" || ac.cls === "airliner" ? cruise + 40 : cruise * 1.3);
+    if (fast) {
+      handling -= 4;
+      notes.push(`Speed reached ${Math.round(maxIas)} knots.`);
+    }
+    handling = Math.max(0, handling);
+    let ops = 15;
+    if (m && ifrIllegal(m)) {
+      ops -= 5;
+      notes.push("IFR weather without an Instrument Rating.");
+    }
+    let eff = 10;
+    const planned = m && m.eteMin ? m.eteMin : 0;
+    const started = m && m.acceptedAt ? Date.parse(m.acceptedAt) : NaN;
+    if (planned > 0 && Number.isFinite(started)) {
+      const actual = Math.max(1, (now - started) / 60000);
+      if (actual > planned * 2.2) eff = 4;
+      else if (actual > planned * 1.5) eff = 7;
+      notes.push(`Planned ${Math.round(planned)} min. ${Math.round(actual)} min to the landing.`);
+    }
+    const pts = Math.max(0, Math.min(100, mission + landPts + handling + ops + eff));
+    const mark = letterFor(pts);
+    const hard = landing && ["HARD", "ROUGH", "CRITICAL"].includes(landing.word);
+    if (hard) sessionHard += 1;
+    return {
+      pts,
+      letter: mark.letter,
+      title: mark.title,
+      tone: mark.letter === "S" || mark.letter === "A" ? "clean" : mark.letter === "D" || mark.letter === "F" ? "rough" : "good",
+      grade: mark.letter,
+      landing,
+      goAround: !!(flags.goAround || (simSnap && simSnap.goAround)),
+      ops,
+      cats: [
+        { k: "MISSION", have: mission, max: 25 },
+        { k: "LANDING", have: landPts, max: 30 },
+        { k: "HANDLING", have: handling, max: 20 },
+        { k: "OPERATIONS", have: ops, max: 15 },
+        { k: "EFFICIENCY", have: eff, max: 10 },
+      ],
+      notes,
+      watch: true,
+    };
+  }
+
+  function grantAchPay(newAch, crashed) {
+    if (crashed || !newAch || !newAch.length) return [];
+    const out = [];
+    newAch.forEach((b) => {
+      if (CERT_ACH[b.id]) return;
+      const pay = ACH_PAY[b.id] || [250, 40];
+      const [money, xp] = pay;
+      state.profile.money += money;
+      state.profile.xp += xp;
+      out.push({ id: b.id, label: b.label, money, xp });
+    });
+    if (out.length) {
+      saveProfile();
+      renderPilotChip();
+      renderLog();
+    }
+    return out;
+  }
+
+  function grantLicenseAwards(fromN, toN, crashed) {
+    if (crashed || toN <= fromN) return [];
+    const earned = [];
+    LICENSES.forEach((L) => {
+      if (L.n > fromN && L.n <= toN) {
+        const money = (L.award && L.award.money) || 0;
+        const xp = (L.award && L.award.xp) || 0;
+        state.profile.money += money;
+        state.profile.xp += xp;
+        earned.push(L);
+      }
+    });
+    if (earned.length) {
+      state.profile.certN = Math.max(Number(state.profile.certN) || 1, toN);
+      saveProfile();
+      renderPilotChip();
+      renderLog();
+      renderHangar();
+      renderAircraft();
+      fillJobTypes();
+    }
+    return earned;
+  }
+
+  function showNextSplash() {
+    const box = $("#debrief");
+    const body = $("#debrief-body");
+    const kick = box && box.querySelector(".pedia-kicker");
+    const go = $("#debrief-go");
+    if (!box || !body) return false;
+    const item = splashQueue.shift();
+    if (!item) return false;
+    if (item.kind === "cert") {
+      const L = item.lic;
+      if (kick) kick.textContent = L.rating ? "RATING EARNED" : "CERTIFICATE EARNED";
+      if (go) go.textContent = splashQueue.length ? "CONTINUE" : "VIEW LOGBOOK";
+      const pay = L.award && (L.award.money || L.award.xp)
+        ? `<div class="wx-grid debrief-grid"><div><span>PAY</span><b>${moneyFmt(L.award.money || 0)}</b></div><div><span>XP</span><b>+${L.award.xp || 0}</b></div></div>`
+        : "";
+      body.innerHTML = `
+        <h2>${esc(L.name)}</h2>
+        <p class="muted">${esc(L.note || "")}</p>
+        <p class="pedia-kicker">NOW AVAILABLE</p>
+        <ul class="debrief-list">${(L.jobs || []).map((j) => `<li>${esc(j)}</li>`).join("")}</ul>
+        ${pay}
+      `;
+      box.hidden = false;
+      sfx("ach");
+      return true;
+    }
+    return false;
+  }
+
   function showDebrief(info) {
     const box = $("#debrief");
     const body = $("#debrief-body");
@@ -1870,24 +3568,52 @@
     const pay = m.money || 0;
     const xp = m.xp || xpFor(m);
     const bonus = info.bonus || 0;
+    const penalty = info.penalty || 0;
+    const ifrMoney = info.ifrMoney || 0;
+    const ifrXp = info.ifrXp || 0;
+    const net = Math.max(0, pay + bonus - penalty - ifrMoney);
     const arr = m.arrTime ? new Date(m.arrTime).getTime() : 0;
-    const timing = !arr ? "" : (Date.now() < arr - 5 * 60000 ? "EARLY" : Date.now() <= arr + 15 * 60000 ? "ON TIME" : "LATE");
+    const scoredAt = info.score && info.simLand ? (simSnap.landAt ? Date.parse(simSnap.landAt) : Date.now()) : Date.now();
+    const timing = (info.score && info.score.time) || (!arr ? "" : (scoredAt < arr - 5 * 60000 ? "EARLY" : scoredAt <= arr + 15 * 60000 ? "ON TIME" : "LATE"));
+    const score = info.score;
     const unlocks = (info.unlocked || []).map((u) => {
       const kind = u.kind === "lm" ? "LANDMARK" : u.kind === "cy" ? "CITY POSTCARD" : "AIRPORT POSTCARD";
       return `<li><b>${kind}</b> ${esc(u.name || u.id)}</li>`;
     }).join("");
-    const ach = (info.newAch || []).filter((b) => !b.hidden || b.have).map((b) => `<li><b>${esc(b.label)}</b> ${esc(b.info)}</li>`).join("");
+    const ach = (info.newAch || []).filter((b) => !b.hidden || b.have).map((b) => {
+      const pay = (info.achPay || []).find((p) => p.id === b.id);
+      const extra = pay ? ` · ${moneyFmt(pay.money)} · +${pay.xp} XP` : "";
+      return `<li><b>${esc(b.label)}</b> ${esc(b.info)}${extra}</li>`;
+    }).join("");
     body.innerHTML = `
       <h2>${esc(icaoOf(m.dep))} → ${esc(icaoOf(m.dest))}</h2>
       <p class="muted">${esc(fieldCaption(m.dep))} → ${esc(fieldCaption(m.dest))}${timing ? " · " + timing : ""}</p>
+      ${score ? `<div class="score-card score-${score.tone || "good"}">
+        <div class="score-letter">${esc(score.letter || score.grade || "")}</div>
+        <div>
+          <div class="score-grade">${esc(score.title || score.grade || "")}</div>
+          <div class="score-cats">
+            ${(score.cats || []).map((c) => `<div class="score-cat"><span>${esc(c.k)}</span><b>${c.have} / ${c.max}</b></div>`).join("")}
+            <div class="score-cat score-total"><span>TOTAL</span><b>${score.pts} / 100</b></div>
+          </div>
+        </div>
+        ${(score.notes || []).length ? `<ul class="score-notes">${score.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
+      </div>` : `<p class="muted">No sim connection. Sortie logged without a rating.</p>`}
       <div class="wx-grid debrief-grid">
-        <div><span>PAY</span><b>${moneyFmt(pay)}</b></div>
+        <div><span>PAY</span><b>${moneyFmt(net)}</b></div>
         ${bonus ? `<div><span>EARLY BONUS</span><b>${moneyFmt(bonus)}</b></div>` : ""}
-        <div><span>XP</span><b>+${xp}</b></div>
+        ${penalty ? `<div><span>LATE PENALTY</span><b>−${moneyFmt(penalty)}</b></div>` : ""}
+        ${ifrMoney ? `<div><span>SAFETY VIOLATION</span><b>−${moneyFmt(ifrMoney)}</b></div>` : ""}
+        <div><span>XP</span><b>${info.crashed ? "0" : `+${Math.max(0, xp - ifrXp)}`}</b></div>
+        ${ifrXp && !info.crashed ? `<div><span>ILLEGAL IFR</span><b>−${ifrXp} XP</b></div>` : ""}
       </div>
+      ${info.crashed ? `<p class="muted">Crash logged${simSnap && simSnap.crashWhy ? " (" + esc(simSnap.crashWhy) + ")" : ""}. Pay and collectables did not post. A normal descent is not a crash.</p>` : ""}
+      ${info.overbank && !info.crashed ? `<p class="muted">Steep bank logged. The sortie still counts.</p>` : ""}
+      ${info.simLand && !info.crashed ? `<p class="muted">Arrival time taken from the sim landing, not the Complete click.</p>` : ""}
+      ${info.ifrXp && !info.crashed ? `<p class="muted">Illegal IFR operation. An Instrument Rating would have cleared the penalty.</p>` : ""}
       ${unlocks ? `<p class="pedia-kicker">COLLECTABLES</p><ul class="debrief-list">${unlocks}</ul>` : ""}
-      ${ach ? `<p class="pedia-kicker">ACHIEVEMENTS</p><ul class="debrief-list">${ach}</ul>` : `<p class="muted">No new achievements this sortie.</p>`}
-      <p class="muted">Departure was a suggestion. You can complete whenever the flight is done.</p>
+      ${ach ? `<p class="pedia-kicker">ACHIEVEMENTS</p><ul class="debrief-list">${ach}</ul>` : ""}
+      ${penalty ? `<p class="muted">Career timed tasking. On-block was missed; pay is docked.</p>` : ""}
     `;
     box.hidden = false;
     sfx("complete");
@@ -2059,6 +3785,7 @@
       return;
     }
     const t = TYPES.find((x) => x.id === m.type);
+    const tailNow = simSnap.connected ? sortieTail() : (m.acTail || "");
     box.innerHTML = `
       <label>ACTIVE SORTIE</label>
       <article class="job on">
@@ -2068,69 +3795,88 @@
         </header>
         <div class="route">
           <div><b>${icaoOf(m.dep)}</b><span>${fieldCaption(m.dep)}</span></div>
-          <div class="arrow">→</div>
+          <div class="arrow" aria-hidden="true">✈</div>
           <div><b>${icaoJump(m.dest)}</b><span>${fieldCaption(m.dest)}</span></div>
         </div>
         <div class="stats">
-          <span>${m.dist} nm</span>
-          <span>hdg ${String(m.hdg).padStart(3, "0")}°</span>
+          <span>${fmtNm(m.dist)}</span>
+          <span>${hdgBits(m.hdg)}</span>
           <span>ETE ${fmtEte(m.eteMin)}</span>
-          <span>DEP ${fmtTimeOf(m.depTime)}</span>
-          <span>ARR ${fmtTimeOf(m.arrTime)}</span>
-          <span>${m.acName}${m.acTail ? " · " + m.acTail : ""}</span>
-          <span>${m.pay.text}</span>
+          <span>DEP ${fmtFieldTime(m.depTime, m.dep)}</span>
+          <span>ARR ${fmtFieldTime(m.arrTime, m.dest)}</span>
+          <span>${m.acName}${tailNow ? " · " + esc(tailNow) : ""}${simSnap.connected && liveCall() ? " · " + esc(liveCall()) : ""}</span>
+          <span>${payLabel(m.pay)}</span>
           ${destWxBits(m.dest)}
+          ${ifrIllegal(m) ? `<span class="svc-due">ILLEGAL IFR</span>` : ""}
         </div>
-        <p class="brief">${m.brief}</p>
+        <p class="brief">${esc(m.brief)}</p>
+        ${jobLearnHtml(m)}
+        ${simStatusLine()}
         <footer class="job-foot">
           <button class="primary tiny" id="complete-msn" title="Complete whenever the flight is done. You do not have to wait for the scheduled arrival.">COMPLETE</button>
           <button class="ghost" id="abort-msn">ABORT</button>
         </footer>
       </article>`;
-    $("#complete-msn").addEventListener("click", () => completeMission());
+    $("#complete-msn").addEventListener("click", async () => {
+      if (state.profile && state.profile.simWatch) await pollSim();
+      if (ifrIllegal(m)) openConfirm("ifr-complete");
+      else completeMission();
+    });
     $("#abort-msn").addEventListener("click", () => openConfirm("abort"));
     if (m.dest) loadWx(m.dest, false, "arr");
   }
 
-  function markFlown(m, bonus) {
+  function markFlown(m, bonus, penalty, opts) {
     const now = new Date();
     const depWx = wxSnap(m.dep);
     const arrWx = wxSnap(m.dest);
     const acId = m.ac || (state.ac && state.ac.id);
+    if (simSnap.connected) m.acTail = sortieTail();
+    const crashed = !!(opts && opts.crashed);
     const ttfLeft = acId ? Math.max(0, SERVICE_HRS - sinceService(acId) - Math.round((m.eteMin / 60) * 10) / 10) : 99;
-    const pay = (m.money || 0) + (bonus || 0);
+    const pay = crashed ? 0 : Math.max(0, (m.money || 0) + (bonus || 0) - (penalty || 0) - ((opts && opts.ifrMoney) || 0));
+    const xp = crashed ? 0 : Math.max(0, ((m.xp || xpFor(m)) - ((opts && opts.ifrXp) || 0)));
     const entry = {
       ...m,
       flown: true,
       flownAt: now.toISOString(),
       hours: Math.round((m.eteMin / 60) * 10) / 10,
-      xp: m.xp || xpFor(m),
+      xp,
       money: pay,
       bonus: bonus || 0,
+      penalty: penalty || 0,
+      crashed,
       wxCat: arrWx.cat || depWx.cat || "",
       depCat: depWx.cat || "",
       arrCat: arrWx.cat || "",
       windKt: Math.max(arrWx.windKt || 0, depWx.windKt || 0, arrWx.gustKt || 0, depWx.gustKt || 0),
       ttfLeft,
       acId,
+      score: opts && opts.score ? opts.score.pts : null,
+      grade: opts && opts.score ? opts.score.letter || "" : "",
+      landing: opts && opts.score && opts.score.landing ? opts.score.landing.word : "",
+      goAround: !!(opts && opts.score && opts.score.goAround),
+      ops: opts && opts.score ? opts.score.ops : null,
     };
     const i = state.log.findIndex((x) => x.id === m.id);
     if (i >= 0) state.log[i] = { ...state.log[i], ...entry };
     else state.log.unshift(entry);
     state.profile.xp += entry.xp;
     state.profile.money += entry.money;
-    if (acId) {
+    if (acId && careerWear(m)) {
       state.profile.hours = state.profile.hours || {};
       state.profile.sinceService = state.profile.sinceService || {};
       state.profile.hours[acId] = Math.round(((state.profile.hours[acId] || 0) + entry.hours) * 10) / 10;
       state.profile.sinceService[acId] = Math.round(((state.profile.sinceService[acId] || 0) + entry.hours) * 10) / 10;
+      if (crashed) state.profile.sinceService[acId] = SERVICE_HRS * (100 / WEAR_DROP);
     }
     const st = pilotStats();
-    st.clean = (st.clean || 0) + 1;
+    if (crashed) st.clean = 0;
+    else st.clean = (st.clean || 0) + 1;
     sessionFlights += 1;
     saveProfile();
     saveLog();
-    mergeUnlocks(unlocksFromFlown([entry]));
+    if (!crashed) mergeUnlocks(unlocksFromFlown([entry]));
     renderLog();
     renderBook();
     renderRank();
@@ -2148,6 +3894,10 @@
     state.ac = ac;
     state.acMaker = ac.maker;
     try { localStorage.setItem("twofly-ac", ac.id); } catch {}
+    if (state.dep && fieldKind(state.dep) === "helipad" && !isRotor(ac)) {
+      const near = airports.find((x) => x && x.id !== state.dep.id && fieldKind(x) !== "helipad" && x.cc === state.dep.cc);
+      if (near) selectDep(near);
+    }
     sfx("select");
     fillTypeSelect();
     syncMakerSelect();
@@ -2156,9 +3906,16 @@
   }
   window.__twoflyPick = pickAircraft;
 
+  function simOk(a) {
+    const sim = (state.profile && state.profile.sim) || "both";
+    if (!a || sim === "both" || !a.sim) return true;
+    return a.sim === sim;
+  }
+
   function filteredAircraft() {
     const q = state.acQuery.trim().toLowerCase();
     return AIRCRAFT.filter((a) => {
+      if (!simOk(a)) return false;
       if (state.mode === "airline") {
         if (!inHangar(a.id)) return false;
         if (!airlineEligible(a)) return false;
@@ -2223,12 +3980,9 @@
     sel.innerHTML = types
       .map((a) => {
         const extra = [];
-        const tail = tailOf(a.id);
-        if (tail) extra.push(tail);
-        extra.push(a.cruise + " kt");
         if (state.mode === "airline" && state.profile.locksOn && !classUnlocked(a.cls)) extra.push("LOCKED");
-        else if (state.mode === "airline" && needsService(a.id)) extra.push("SERVICE DUE");
-        return `<option value="${esc(a.id)}"${state.ac && state.ac.id === a.id ? " selected" : ""}>${esc(a.name)}${extra.length ? " · " + extra.join(" · ") : ""}</option>`;
+        else if (serviceBlocks(a.id)) extra.push("GROUNDED");
+        return `<option value="${esc(a.id)}"${state.ac && state.ac.id === a.id ? " selected" : ""}>${esc(typeLabel(a))}${extra.length ? " · " + extra.join(" · ") : ""}</option>`;
       })
       .join("");
     syncFav();
@@ -2259,18 +4013,20 @@
       el.innerHTML = "";
       return;
     }
-    $("#ac-meta").innerHTML = `
-      <span>${a.maker}</span>
-      <span>${a.cls}</span>
-      <span>${a.cruise} kt</span>
-      <span>${a.range} nm</span>
-      <span>${a.payload.toLocaleString()} lb useful</span>
-      <span>${a.pax} pax</span>
-      <span>${a.minRwy ? a.minRwy.toLocaleString() + " ft min" : "short-field ok"}</span>
-      ${tailOf(a.id) ? `<span>${tailOf(a.id)}</span>` : ""}
-      ${a.note ? `<span>${a.note}</span>` : ""}
-      ${needsService(a.id) ? `<span class="svc-due">SERVICE DUE</span>` : `<span>${airframeHours(a.id).toFixed(1)} hr</span>`}
+    const tail = sortieTail();
+    const call = liveCall();
+    el.innerHTML = `
+      <div class="ac-ident"><span>${esc(a.maker)}</span><b>${esc(typeLabel(a))}</b></div>
+      <p class="ac-nums">${fmtKt(a.cruise)} · ${fmtNm(a.range)} · ${fmtMass(a.payload)} · ${a.pax} pax${a.minRwy ? " · " + fmtField(a.minRwy) : ""}</p>
+      ${tail ? `<p class="ac-nums">${esc(tail)}${call ? " · " + esc(call) : ""}</p>` : ""}
+      ${a.note ? `<p class="ac-nums">${esc(a.note)}</p>` : ""}
+      ${state.mode === "airline" && inHangar(a.id) && state.profile.serviceOn
+        ? `<p class="ac-nums">${airframeHours(a.id).toFixed(1)} hr · TTS ${Math.max(0, SERVICE_HRS - sinceService(a.id)).toFixed(1)} hr · ${healthHtml(a.id)}${healthPct(a.id) <= 0 ? " · GROUNDED" : ""}</p>`
+        : state.mode === "airline" && inHangar(a.id)
+          ? `<p class="ac-nums">${airframeHours(a.id).toFixed(1)} hr</p>`
+          : ""}
     `;
+    paintSimLine();
   }
 
   function renderDep() {
@@ -2281,16 +4037,16 @@
       card.innerHTML = `<div class="muted">ENTER ICAO.</div>`;
       return;
     }
+    const facts = [
+      a.rw ? fmtField(a.rw) : "",
+      a.pv ? "PAVED" : "UNPAVED",
+      a.el != null ? fmtField(a.el) : "",
+    ].filter(Boolean).join(" · ");
     card.innerHTML = `
-      <div class="icao">${a.id}${a.iata ? `<small>${a.iata}</small>` : ""}</div>
+      <div class="icao">${a.id}</div>
       <div class="name">${a.n || ""}</div>
       <div class="sub">${[a.c, COUNTRIES[a.cc] || a.cc].filter(Boolean).join(" · ")}</div>
-      <div class="chips">
-        <span>${fieldKind(a)}</span>
-        <span>${a.rw ? a.rw.toLocaleString() + " ft" : "rwy n/a"}</span>
-        <span>${a.pv ? "paved" : "unpaved / unknown"}</span>
-        ${a.el != null ? `<span>${a.el.toLocaleString()} ft elev</span>` : ""}
-      </div>
+      <div class="dep-facts"><span class="tag">${fieldKind(a)}</span><span>${facts}</span></div>
     `;
     const inp = $("#dep-input");
     if (inp) inp.value = a.id;
@@ -2313,21 +4069,24 @@
           </header>
           <div class="route">
             <div><b>${icaoOf(m.dep)}</b><span>${fieldCaption(m.dep)}</span></div>
-            <div class="arrow">→</div>
+            <div class="arrow" aria-hidden="true">✈</div>
             <div><b>${icaoJump(m.dest)}</b><span>${fieldCaption(m.dest)}</span></div>
           </div>
           <div class="stats">
-            <span>${m.dist} nm</span>
-            <span>hdg ${String(m.hdg).padStart(3, "0")}°</span>
+            <span>${fmtNm(m.dist)}</span>
+            <span>${hdgBits(m.hdg)}</span>
             <span>ETE ${fmtEte(m.eteMin)}</span>
-            <span>DEP ${fmtTimeOf(m.depTime)}</span>
-            <span>ARR ${fmtTimeOf(m.arrTime)}</span>
-            <span>${m.alt.toLocaleString()} ft</span>
-            <span>${m.pay.text}</span>
+            <span>DEP ${fmtFieldTime(m.depTime, m.dep)}</span>
+            <span>ARR ${fmtFieldTime(m.arrTime, m.dest)}</span>
+            ${(m.mode === "airline" && isTimed(m)) ? "<span>ON-BLOCK</span>" : ""}
+            <span>${fmtAlt(m.alt)}</span>
+            <span>${payLabel(m.pay)}</span>
             ${m.acTail ? `<span>${m.acTail}</span>` : ""}
             ${destWxBits(m.dest)}
+            ${ifrIllegal(m) ? `<span class="svc-due">ILLEGAL IFR</span>` : ""}
           </div>
-          <p class="brief">${m.brief}</p>
+          <p class="brief">${esc(m.brief)}</p>
+          ${jobLearnHtml(m)}
           <div class="notes">${m.constraints.map((c) => `<span>${c}</span>`).join("")}</div>
           <footer class="job-foot">
             <button class="primary tiny accept" ${state.active ? "disabled" : ""}>ACCEPT TASKING</button>
@@ -2342,16 +4101,39 @@
     if (!el) return;
     const p = state.profile;
     const lic = licenseFor(p.xp);
+    const curXp = p.xp || 0;
+    const floor = lic.xp || 0;
+    const ceil = lic.next ? lic.next.xp : curXp;
+    const pct = lic.next ? Math.max(0, Math.min(100, ((curXp - floor) / Math.max(1, ceil - floor)) * 100)) : 100;
     el.innerHTML = `
       ${iconHtml(p, "chip-face")}
       <div class="chip-meta">
-        <b>${p.name || "PILOT"}</b>
-        ${p.showAirline && p.airline ? `<span class="chip-line">${p.airline}</span>` : ""}
-        <span>RANK ${lic.n} · ${lic.name}</span>
-        <span>${lic.next ? `${p.xp} / ${lic.next.xp} → ${lic.next.name}` : `${p.xp} XP`}</span>
+        ${p.showAirline && p.airline ? `<span class="chip-line">${esc(p.airline)}</span>` : ""}
+        <b>${esc(p.name || "PILOT")}</b>
+        <span class="chip-rank">${esc(lic.name)}</span>
+        <span class="chip-xp">${lic.next ? `${curXp.toLocaleString()} / ${ceil.toLocaleString()} XP` : `${curXp.toLocaleString()} XP`}</span>
+        <div class="xp-track"><div id="xp-bar" style="width:${pct}%"></div></div>
+        ${lic.next ? `<span class="chip-next">→ ${esc(lic.next.name)}</span>` : ""}
         <div class="chip-cash">${moneyFmt(p.money)}</div>
       </div>
     `;
+  }
+
+  function fillJobTypes() {
+    const typeEl = $("#type");
+    if (!typeEl) return;
+    const cap = careerTypeSet();
+    const opts = TYPES.filter((t) => !cap || cap.has(t.id));
+    const cur = state.type || "any";
+    typeEl.innerHTML =
+      `<option value="any">ANY AUTHORIZED CATEGORY</option>` +
+      opts.map((t) => `<option value="${t.id}">${t.label}</option>`).join("");
+    if (cur !== "any" && cap && !cap.has(cur)) {
+      state.type = "any";
+      typeEl.value = "any";
+    } else {
+      typeEl.value = opts.some((t) => t.id === cur) || cur === "any" ? cur : "any";
+    }
   }
 
   function renderAirline() {
@@ -2374,11 +4156,12 @@
     }
     const blurbLong = $("#desk-blurb-long");
     if (state.mode === "airline") {
-      if (blurbLong) blurbLong.textContent = "AIRLINE MODE generates revenue taskings using only aircraft currently in your hangar. Completing a tasking adds both pay and XP to your pilot file. Rank restrictions and maintenance apply when enabled. Use HOME to set your airline base, and purchase aircraft types from the HANGAR tab.";
+      if (blurbLong) blurbLong.textContent = "CAREER MODE is a hangar-only progression game. Certificates unlock aircraft classes and mission types when certificate locks are on. Completing a tasking adds pay and XP. Maintenance and home field apply here.";
     } else {
       if (blurbLong) blurbLong.textContent = "FREE FLIGHT lets you take civilian taskings from any airfield. Every aircraft type in your files is eligible. Completing a sortie adds the payment to your pilot file. Rank restrictions and hangar ownership do not apply.";
     }
     renderHome();
+    fillJobTypes();
   }
 
   function homeField() {
@@ -2394,8 +4177,8 @@
     if (go) go.disabled = !home;
     const setMeta = $("#home-set-meta");
     if (setMeta) setMeta.textContent = home
-      ? `CURRENT BASE ${home.id} · ${home.n}. USED BY THE HOME BUTTON IN AIRLINE MODE.`
-      : "USED BY THE HOME BUTTON IN AIRLINE MODE.";
+      ? `CURRENT BASE ${home.id} · ${home.n}. USED BY THE HOME BUTTON IN CAREER MODE.`
+      : "USED BY THE HOME BUTTON IN CAREER MODE.";
     const homeIn = $("#home-input");
     if (homeIn && document.activeElement !== homeIn) homeIn.value = home ? home.id : "";
   }
@@ -2414,7 +4197,7 @@
         <div class="wx-grid">
           <div><span>LOAN AVAILABLE</span><b>${moneyFmt(left)}</b></div>
           <div><span>DEBT</span><b>${moneyFmt(debt)}</b></div>
-          ${p.interestOn ? `<div><span>INTEREST</span><b>1% / DAY</b></div>` : `<div><span>INTEREST</span><b>OFF</b></div>`}
+          ${p.interestOn ? `<div><span>INTEREST</span><b>8% / YEAR</b></div>` : `<div><span>INTEREST</span><b>OFF</b></div>`}
         </div>
         <div class="row">
           <div>
@@ -2452,22 +4235,31 @@
     if (fleet) {
       const rows = p.hangar.map((id) => AIRCRAFT.find((a) => a.id === id)).filter(Boolean);
       fleet.innerHTML = rows.map((a) => {
-        const due = needsService(a.id);
+        const pct = healthPct(a.id);
         const hrs = airframeHours(a.id);
-        const wear = sinceService(a.id);
+        const since = sinceService(a.id);
+        const left = Math.max(0, SERVICE_HRS - since);
+        const leased = isLeased(a.id);
+        const dead = p.serviceOn && pct <= 0;
+        const rate = leased ? leaseRate(a) : 0;
+        const remain = leased ? leaseBuyout(a.id) : 0;
+        const paid = leased ? leasePaid(a.id) : 0;
+        const wearLine = p.serviceOn
+          ? ` · ${hrs.toFixed(1)} HR · TTS ${left.toFixed(1)} HR · ${healthHtml(a.id)}${dead ? " · GROUNDED" : ""}`
+          : ` · ${hrs.toFixed(1)} HR`;
         return `
         <div class="fleet-row">
           <div>
             <b>${a.name}</b>
-            <span class="muted">${a.maker} · ${hrs.toFixed(1)} HR${p.serviceOn ? ` · TTS ${Math.max(0, SERVICE_HRS - wear).toFixed(1)} HR` : ""}${due ? " · SERVICE DUE" : ""}</span>
-            <label class="tail-lab">TAIL
-              <input class="tail-in" data-tail="${a.id}" type="text" maxlength="10" value="${tailOf(a.id)}" placeholder="N-NUMBER" autocomplete="off" spellcheck="false" />
-            </label>
+            <span class="muted">${a.maker}${wearLine}${leased ? ` · LEASED ${moneyFmt(rate)} / DAY · PAID ${moneyFmt(paid)} · BUYOUT ${moneyFmt(remain)}` : ""}</span>
           </div>
           <div class="fleet-act">
             <button type="button" class="tiny" data-fly="${a.id}">SELECT</button>
-            ${due ? `<button type="button" class="tiny" data-repair="${a.id}">REPAIR ${moneyFmt(repairCost(a))}</button>` : ""}
-            <button type="button" class="ghost tiny" data-sell="${a.id}">SELL ${moneyFmt(Math.round(listPrice(a) * 0.7))}</button>
+            ${p.serviceOn && pct < 100 ? `<button type="button" class="tiny" data-repair="${a.id}">SERVICE ${moneyFmt(repairCost(a))}</button>` : ""}
+            ${leased
+              ? `<button type="button" class="tiny" data-buyout="${a.id}">${remain ? "BUY OUT " + moneyFmt(remain) : "OWN"}</button>
+                 <button type="button" class="ghost tiny" data-return="${a.id}">RETURN</button>`
+              : `<button type="button" class="ghost tiny" data-sell="${a.id}">SELL ${moneyFmt(sellPrice(a))}</button>`}
           </div>
         </div>`;
       }).join("") || `<p class="muted">HANGAR EMPTY.</p>`;
@@ -2476,6 +4268,7 @@
       const q = (state.mktQuery || "").trim().toLowerCase();
       const filt = state.mktFilter || "all";
       const list = AIRCRAFT.filter((a) => {
+        if (!simOk(a)) return false;
         if (inHangar(a.id) || !airlineEligible(a)) return false;
         if (filt === "jet" && a.cls !== "jet" && a.cls !== "airliner") return false;
         if (filt === "helo" && a.cls !== "helo" && a.cls !== "evtol") return false;
@@ -2493,7 +4286,7 @@
         const priceHtml = free
           ? `<span class="price-ok">FREE</span>`
           : `<span class="${afford ? "price-ok" : "price-no"}">${moneyFmt(price)}</span>`;
-        const lockHtml = locked ? ` · <span class="lock-rank">RANK LOCK</span>` : "";
+        const lockHtml = locked ? ` · <span class="lock-rank">CERT LOCK</span>` : "";
         return `<div class="fleet-row">
           <div>
             <b>${a.name}</b>
@@ -2501,10 +4294,25 @@
           </div>
           <div class="fleet-act">
             <button type="button" class="tiny" data-buy="${a.id}" ${locked || full ? "disabled" : ""}>${free ? "ADD" : "BUY"}</button>
+            ${free ? "" : `<button type="button" class="ghost tiny" data-lease="${a.id}" ${locked || full ? "disabled" : ""}>LEASE ${moneyFmt(leaseRate(a))}/DAY</button>`}
           </div>
         </div>`;
       }).join("") || `<p class="muted">NO MATCHING LISTINGS.</p>`;
     }
+  }
+
+  function clampHud(n) {
+    const v = Math.round(Number(n) || 100);
+    const snapped = Math.round(v / 10) * 10;
+    return Math.min(300, Math.max(100, snapped));
+  }
+
+  function applyHudScale() {
+    const n = clampHud(state.profile && state.profile.hudScale);
+    const z = String(n / 100);
+    document.documentElement.style.zoom = z;
+    const hudVal = $("#hud-scale-val");
+    if (hudVal) hudVal.textContent = n + "%";
   }
 
   function renderSettings() {
@@ -2515,13 +4323,22 @@
     const sound = $("#set-sound");
     const clock = $("#set-clock");
     const ccyEl = $("#set-ccy");
-    const tempEl = $("#set-temp");
+    const tempEl = $("#set-units");
+    const simEl = $("#set-sim");
     if (money) money.checked = !!state.profile.moneyOn;
     if (locks) locks.checked = !!state.profile.locksOn;
     if (svc) svc.checked = state.profile.serviceOn !== false;
     if (interest) interest.checked = state.profile.interestOn !== false;
     if (sound) sound.checked = state.profile.soundOn !== false;
+    const watch = $("#set-simwatch");
+    if (watch) watch.checked = !!state.profile.simWatch;
+    const hud = $("#set-hud");
+    const hudVal = $("#hud-scale-val");
+    const scale = clampHud(state.profile.hudScale);
+    if (hud) hud.value = String(scale);
+    if (hudVal) hudVal.textContent = scale + "%";
     if (clock) clock.value = state.profile.clock12 ? "12" : "24";
+    if (simEl) simEl.value = state.profile.sim === "20" || state.profile.sim === "24" ? state.profile.sim : "both";
     if (ccyEl) {
       if (!ccyEl.options.length) {
         ccyEl.innerHTML = CURRENCIES.map(
@@ -2530,7 +4347,7 @@
       }
       ccyEl.value = ccy().id;
     }
-    if (tempEl) tempEl.value = useF() ? "F" : "C";
+    if (tempEl) tempEl.value = useEU() ? "eu" : "us";
     renderHome();
   }
 
@@ -2565,17 +4382,198 @@
     }
   }
 
-  function fmtTimeOf(iso) {
+  function gmtEtc(lon) {
+    let h = Math.round((Number(lon) || 0) / 15);
+    if (h > 14) h = 14;
+    if (h < -12) h = -12;
+    if (h === 0) return "UTC";
+    return "Etc/GMT" + (h > 0 ? "-" : "+") + Math.abs(h);
+  }
+
+  function tzOf(ap) {
+    if (!ap) return undefined;
+    const cc = String(ap.cc || "").toUpperCase();
+    const rg = String(ap.rg || "").toUpperCase();
+    const lon = Number(ap.lon);
+    const US = {
+      AK: lon < -169 ? "America/Adak" : "America/Anchorage",
+      AL: "America/Chicago", AR: "America/Chicago", AZ: "America/Phoenix",
+      CA: "America/Los_Angeles", CO: "America/Denver", CT: "America/New_York",
+      DC: "America/New_York", DE: "America/New_York",
+      FL: lon < -85.5 ? "America/Chicago" : "America/New_York",
+      GA: "America/New_York", HI: "Pacific/Honolulu", IA: "America/Chicago",
+      ID: lon < -114.5 ? "America/Los_Angeles" : "America/Boise",
+      IL: "America/Chicago",
+      IN: lon < -87 ? "America/Chicago" : "America/Indiana/Indianapolis",
+      KS: lon < -101.5 ? "America/Denver" : "America/Chicago",
+      KY: lon < -85.5 ? "America/Chicago" : "America/New_York",
+      LA: "America/Chicago", MA: "America/New_York", MD: "America/New_York",
+      ME: "America/New_York", MI: "America/Detroit", MN: "America/Chicago",
+      MO: "America/Chicago", MS: "America/Chicago", MT: "America/Denver",
+      NC: "America/New_York",
+      ND: lon < -101 ? "America/Denver" : "America/Chicago",
+      NE: lon < -101 ? "America/Denver" : "America/Chicago",
+      NH: "America/New_York", NJ: "America/New_York", NM: "America/Denver",
+      NV: "America/Los_Angeles", NY: "America/New_York", OH: "America/New_York",
+      OK: "America/Chicago",
+      OR: lon > -117.5 ? "America/Boise" : "America/Los_Angeles",
+      PA: "America/New_York", RI: "America/New_York", SC: "America/New_York",
+      SD: lon < -100.5 ? "America/Denver" : "America/Chicago",
+      TN: lon < -86.5 ? "America/Chicago" : "America/New_York",
+      TX: lon < -104.5 ? "America/Denver" : "America/Chicago",
+      UT: "America/Denver", VA: "America/New_York", VT: "America/New_York",
+      WA: "America/Los_Angeles", WI: "America/Chicago", WV: "America/New_York",
+      WY: "America/Denver", PR: "America/Puerto_Rico", VI: "America/St_Thomas",
+      GU: "Pacific/Guam", AS: "Pacific/Pago_Pago", MP: "Pacific/Saipan",
+    };
+    if (cc === "US") return US[rg] || gmtEtc(lon);
+    if (cc === "CA") {
+      const CA = {
+        AB: "America/Edmonton", BC: "America/Vancouver", MB: "America/Winnipeg",
+        NB: "America/Moncton", NL: "America/St_Johns", NS: "America/Halifax",
+        NT: "America/Yellowknife", NU: "America/Iqaluit",
+        ON: lon < -90 ? "America/Winnipeg" : "America/Toronto",
+        PE: "America/Halifax", QC: "America/Toronto", SK: "America/Regina",
+        YT: "America/Whitehorse",
+      };
+      return CA[rg] || "America/Toronto";
+    }
+    if (cc === "AU") {
+      const AU = {
+        NSW: "Australia/Sydney", VIC: "Australia/Melbourne", QLD: "Australia/Brisbane",
+        SA: "Australia/Adelaide", WA: "Australia/Perth", TAS: "Australia/Hobart",
+        NT: "Australia/Darwin", ACT: "Australia/Sydney",
+      };
+      return AU[rg] || (lon < 129 ? "Australia/Perth" : lon < 138 ? "Australia/Adelaide" : "Australia/Sydney");
+    }
+    if (cc === "ID") {
+      if (lon < 109) return "Asia/Jakarta";
+      if (lon < 125) return "Asia/Makassar";
+      return "Asia/Jayapura";
+    }
+    if (cc === "MX") {
+      if (lon < -107) return "America/Tijuana";
+      if (lon < -102) return "America/Mazatlan";
+      return "America/Mexico_City";
+    }
+    if (cc === "BR") {
+      if (lon > -35) return "America/Noronha";
+      if (lon < -67) return "America/Rio_Branco";
+      if (lon < -54) return "America/Manaus";
+      return "America/Sao_Paulo";
+    }
+    if (cc === "RU") return gmtEtc(lon);
+    if (cc === "ES" && lon < -10) return "Atlantic/Canary";
+    if (cc === "PT" && lon < -15) return "Atlantic/Azores";
+    if (cc === "NZ" && lon < -170) return "Pacific/Chatham";
+    const CC = {
+      AD:"Europe/Andorra", AE:"Asia/Dubai", AF:"Asia/Kabul", AL:"Europe/Tirane",
+      AM:"Asia/Yerevan", AO:"Africa/Luanda", AR:"America/Argentina/Buenos_Aires",
+      AT:"Europe/Vienna", AZ:"Asia/Baku", BA:"Europe/Sarajevo", BD:"Asia/Dhaka",
+      BE:"Europe/Brussels", BG:"Europe/Sofia", BH:"Asia/Bahrain", BO:"America/La_Paz",
+      BY:"Europe/Minsk", BZ:"America/Belize", CH:"Europe/Zurich", CL:"America/Santiago",
+      CN:"Asia/Shanghai", CO:"America/Bogota", CR:"America/Costa_Rica", CU:"America/Havana",
+      CY:"Asia/Nicosia", CZ:"Europe/Prague", DE:"Europe/Berlin", DK:"Europe/Copenhagen",
+      DO:"America/Santo_Domingo", DZ:"Africa/Algiers", EC:"America/Guayaquil",
+      EE:"Europe/Tallinn", EG:"Africa/Cairo", ET:"Africa/Addis_Ababa", FI:"Europe/Helsinki",
+      FJ:"Pacific/Fiji", FR:"Europe/Paris", GB:"Europe/London", GE:"Asia/Tbilisi",
+      GH:"Africa/Accra", GR:"Europe/Athens", GT:"America/Guatemala", HK:"Asia/Hong_Kong",
+      HN:"America/Tegucigalpa", HR:"Europe/Zagreb", HU:"Europe/Budapest", IE:"Europe/Dublin",
+      IL:"Asia/Jerusalem", IN:"Asia/Kolkata", IQ:"Asia/Baghdad", IR:"Asia/Tehran",
+      IS:"Atlantic/Reykjavik", IT:"Europe/Rome", JO:"Asia/Amman", JP:"Asia/Tokyo",
+      KE:"Africa/Nairobi", KG:"Asia/Bishkek", KH:"Asia/Phnom_Penh", KR:"Asia/Seoul",
+      KW:"Asia/Kuwait", KZ:"Asia/Almaty", LA:"Asia/Vientiane", LB:"Asia/Beirut",
+      LK:"Asia/Colombo", LT:"Europe/Vilnius", LU:"Europe/Luxembourg", LV:"Europe/Riga",
+      MA:"Africa/Casablanca", MC:"Europe/Monaco", MD:"Europe/Chisinau", ME:"Europe/Podgorica",
+      MK:"Europe/Skopje", MM:"Asia/Yangon", MN:"Asia/Ulaanbaatar", MO:"Asia/Macau",
+      MT:"Europe/Malta", MY:"Asia/Kuala_Lumpur", MZ:"Africa/Maputo", NA:"Africa/Windhoek",
+      NG:"Africa/Lagos", NI:"America/Managua", NL:"Europe/Amsterdam", NO:"Europe/Oslo",
+      NP:"Asia/Kathmandu", NZ:"Pacific/Auckland", OM:"Asia/Muscat", PA:"America/Panama",
+      PE:"America/Lima", PH:"Asia/Manila", PK:"Asia/Karachi", PL:"Europe/Warsaw",
+      PR:"America/Puerto_Rico", PT:"Europe/Lisbon", PY:"America/Asuncion", QA:"Asia/Qatar",
+      RO:"Europe/Bucharest", RS:"Europe/Belgrade", SA:"Asia/Riyadh", SE:"Europe/Stockholm",
+      SG:"Asia/Singapore", SI:"Europe/Ljubljana", SK:"Europe/Bratislava", SV:"America/El_Salvador",
+      TH:"Asia/Bangkok", TN:"Africa/Tunis", TR:"Europe/Istanbul", TW:"Asia/Taipei",
+      UA:"Europe/Kyiv", UY:"America/Montevideo", UZ:"Asia/Tashkent", VE:"America/Caracas",
+      VN:"Asia/Ho_Chi_Minh", ZA:"Africa/Johannesburg", ZW:"Africa/Harare",
+      AT:"Europe/Vienna", ES:"Europe/Madrid",
+    };
+    if (CC[cc]) return CC[cc];
+    return gmtEtc(lon);
+  }
+
+  function hourInTz(iso, ap) {
+    const d = iso instanceof Date ? iso : new Date(iso);
+    if (Number.isNaN(d.getTime())) return -1;
+    const tz = tzOf(ap);
+    if (!tz) return d.getHours();
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz, hour: "numeric", hourCycle: "h23", hour12: false,
+      }).formatToParts(d);
+      let h = parseInt((parts.find((p) => p.type === "hour") || {}).value, 10);
+      if (h === 24) h = 0;
+      return Number.isFinite(h) ? h : d.getHours();
+    } catch (e) {
+      return d.getHours();
+    }
+  }
+
+  function tzShort(iso, ap) {
+    const tz = tzOf(ap);
+    if (!tz) return "LCL";
+    try {
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: tz,
+        timeZoneName: "short",
+        hour: "numeric",
+      }).formatToParts(iso instanceof Date ? iso : new Date(iso));
+      const n = ((parts.find((p) => p.type === "timeZoneName") || {}).value || "LCL")
+        .replace("GMT", "UTC")
+        .replace(" ", "");
+      return n || "LCL";
+    } catch (e) {
+      return "LCL";
+    }
+  }
+
+  function fmtTimeOf(iso, ap) {
     if (!iso) return "—";
     const d = iso instanceof Date ? iso : new Date(iso);
     if (Number.isNaN(d.getTime())) return "—";
-    const mm = String(d.getMinutes()).padStart(2, "0");
-    if (state.profile && state.profile.clock12) {
-      const h = d.getHours();
-      const h12 = h % 12 || 12;
-      return `${h12}:${mm}${h < 12 ? "AM" : "PM"}`;
+    const clock12 = !!(state.profile && state.profile.clock12);
+    const tz = tzOf(ap);
+    try {
+      const opts = { hour: "numeric", minute: "2-digit", hour12: clock12 };
+      if (tz) opts.timeZone = tz;
+      if (!clock12) opts.hourCycle = "h23";
+      const parts = new Intl.DateTimeFormat("en-US", opts).formatToParts(d);
+      const hour = (parts.find((p) => p.type === "hour") || {}).value;
+      const min = (parts.find((p) => p.type === "minute") || {}).value;
+      if (!hour || !min) throw new Error("time");
+      if (clock12) {
+        const per = ((parts.find((p) => p.type === "dayPeriod") || {}).value || "").toUpperCase().replace(/\./g, "");
+        const h = String(parseInt(hour, 10) || 12);
+        const ampm = per === "AM" || per === "PM" ? per : (parseInt(hour, 10) < 12 ? "AM" : "PM");
+        return `${h}:${min}${ampm}`;
+      }
+      let h24 = parseInt(hour, 10);
+      if (h24 === 24) h24 = 0;
+      return `${String(h24).padStart(2, "0")}:${min}`;
+    } catch (e) {
+      const mm = String(d.getMinutes()).padStart(2, "0");
+      if (clock12) {
+        const h = d.getHours();
+        return `${h % 12 || 12}:${mm}${h < 12 ? "AM" : "PM"}`;
+      }
+      return `${String(d.getHours()).padStart(2, "0")}:${mm}`;
     }
-    return `${String(d.getHours()).padStart(2, "0")}:${mm}`;
+  }
+
+  function fmtFieldTime(iso, ap) {
+    const t = fmtTimeOf(iso, ap);
+    if (!ap || t === "—") return t;
+    return `${t} ${tzShort(iso, ap)}`;
   }
 
   function fmtClock(d) {
@@ -2587,6 +4585,15 @@
   function tickClock() {
     const el = $("#desk-clock");
     if (el) el.textContent = fmtClock(new Date());
+    pollSim().then(() => {
+      paintSimLine();
+      if (!(state.profile && state.profile.simWatch)) return;
+      if (!state.active) return;
+      const k = [simSnap.connected, simSnap.airborne, simSnap.landed, simSnap.crashed, simSnap.overbank, simSnap.atcId || "", simSnap.callsign || ""].join("|");
+      if (k === tickClock.lastSim) return;
+      tickClock.lastSim = k;
+      renderActive();
+    });
   }
 
   function fmtDate(iso) {
@@ -2596,6 +4603,175 @@
     return fmtClock(d);
   }
 
+  function ifrRideHtml(lic) {
+    if (hasIfr()) return `<p class="muted pad-top">Instrument Rating held. IFR weather does not post a penalty.</p>`;
+    if (!lic || lic.n < 2) return `<p class="muted pad-top">Private certificate is required before an instrument checkride.</p>`;
+    const fee = ifrFee();
+    const broke = fee && (state.profile.money || 0) < fee;
+    return `
+      <p class="pedia-kicker">INSTRUMENT CHECKRIDE</p>
+      <p class="muted">Four of five on a written. Pass grants the Instrument Rating now. ${fee ? "Fee " + moneyFmt(fee) + " on a pass." : "No fee. Money is off."}</p>
+      <button type="button" class="primary tiny" id="ifr-check" ${broke ? "disabled" : ""}>${broke ? "NEED " + moneyFmt(fee) : "SIT CHECKRIDE"}</button>
+    `;
+  }
+
+  function startCheckride() {
+    const fee = ifrFee();
+    if (hasIfr()) return;
+    if (licenseFor().n < 2) return;
+    if (fee && (state.profile.money || 0) < fee) return;
+    state.pendingRide = { qs: shuffle(IFR_Q.slice()).slice(0, 5), i: 0, score: 0 };
+    paintCheckride();
+  }
+
+  function paintCheckride() {
+    const box = $("#checkride");
+    const body = $("#checkride-body");
+    const go = $("#checkride-go");
+    const no = $("#checkride-no");
+    const ride = state.pendingRide;
+    if (!box || !body || !ride) return;
+    const kick = box.querySelector(".pedia-kicker");
+    if (ride.done) {
+      if (kick) kick.textContent = ride.pass ? "RATING EARNED" : "NOT A PASS";
+      if (go) go.hidden = true;
+      if (no) no.textContent = "CLOSE";
+      body.innerHTML = ride.pass
+        ? `<h2>INSTRUMENT RATING</h2><p>Four of five. The rating is on the pilot file.${ride.fee ? " Fee " + moneyFmt(ride.fee) + " posted." : ""}</p>`
+        : `<h2>${ride.score} OF 5</h2><p>Not a pass. No fee charged. Sit it again when you want.</p>`;
+      box.hidden = false;
+      return;
+    }
+    const q = ride.qs[ride.i];
+    if (kick) kick.textContent = `QUESTION ${ride.i + 1} OF 5`;
+    if (go) go.hidden = true;
+    if (no) no.textContent = "CANCEL";
+    body.innerHTML = `
+      <h2>${esc(q.q)}</h2>
+      <div class="ride-answers">
+        ${q.a.map((t, i) => `<button type="button" class="ghost ride-ans" data-i="${i}">${esc(t)}</button>`).join("")}
+      </div>
+    `;
+    box.hidden = false;
+  }
+
+  function answerCheckride(i) {
+    const ride = state.pendingRide;
+    if (!ride || ride.done) return;
+    const q = ride.qs[ride.i];
+    if (Number(i) === q.i) ride.score += 1;
+    ride.i += 1;
+    if (ride.i >= ride.qs.length) {
+      finishCheckride();
+      return;
+    }
+    paintCheckride();
+  }
+
+  function finishCheckride() {
+    const ride = state.pendingRide;
+    if (!ride) return;
+    ride.done = true;
+    ride.pass = ride.score >= 4;
+    ride.fee = 0;
+    if (ride.pass) {
+      const fee = ifrFee();
+      if (fee && (state.profile.money || 0) < fee) {
+        ride.pass = false;
+        ride.broke = true;
+      } else {
+        if (fee) {
+          state.profile.money -= fee;
+          ride.fee = fee;
+        }
+        const before = licenseFor().n;
+        state.profile.certN = Math.max(Number(state.profile.certN) || 1, 3);
+        saveProfile();
+        renderPilotChip();
+        renderLog();
+        renderHangar();
+        renderAircraft();
+        fillJobTypes();
+        if (before < 3) {
+          const L = LICENSES.find((x) => x.n === 3);
+          splashQueue.push({ kind: "cert", lic: { ...L, award: { money: 0, xp: 0 } } });
+        }
+      }
+    }
+    paintCheckride();
+    if (ride.pass) sfx("ach");
+    else sfx("error");
+  }
+
+  function closeCheckride() {
+    const ride = state.pendingRide;
+    const box = $("#checkride");
+    if (box) box.hidden = true;
+    state.pendingRide = null;
+    if (ride && ride.pass) {
+      if (!showNextSplash()) renderCareerFile();
+    } else {
+      renderCareerFile();
+    }
+  }
+
+  function renderCareerFile() {
+    const el = $("#career-file");
+    if (!el) return;
+    const p = state.profile;
+    const lic = licenseFor(p.xp);
+    const { flown } = flownStats();
+    const hours = flown.reduce((s, m) => s + (m.hours || 0), 0);
+    const nm = flown.reduce((s, m) => s + (m.dist || 0), 0);
+    const career = flown.filter((m) => m.mode === "airline");
+    const acIds = new Set(flown.map((m) => m.ac).filter(Boolean));
+    const fields = new Set(state.collection.stamps || []);
+    const marks = new Set(state.collection.marks || []);
+    const lo = lic.xp;
+    const hi = lic.next ? lic.next.xp : lo;
+    const pct = lic.next ? Math.min(100, Math.round(((p.xp - lo) / Math.max(1, hi - lo)) * 100)) : 100;
+    const nextTxt = lic.next
+      ? `NEXT ${lic.next.name} · ${p.xp} / ${lic.next.xp} XP`
+      : `${p.xp} XP · GRADE CEILING`;
+    const ticks = LICENSES.map((L) => {
+      const on = lic.n >= L.n;
+      return `<span class="${on ? "have" : ""}">${esc(L.name.replace(" PILOT", "").replace(" RATING", " IFR"))}</span>`;
+    }).join("");
+    const { list } = badges();
+    const st = pilotStats();
+    st.achAt = st.achAt && typeof st.achAt === "object" ? st.achAt : {};
+    let stamped = false;
+    const now = Date.now();
+    list.forEach((b, i) => {
+      if (!b.have || b.hidden || st.achAt[b.id]) return;
+      st.achAt[b.id] = now - (list.length - i);
+      stamped = true;
+    });
+    if (stamped) saveProfile();
+    const recent = list
+      .filter((b) => b.have && !b.hidden)
+      .sort((a, b) => (st.achAt[b.id] || 0) - (st.achAt[a.id] || 0))
+      .slice(0, 6);
+    el.innerHTML = `
+      <p class="pedia-kicker">PILOT CAREER</p>
+      <h2>${esc(lic.name)}</h2>
+      <p class="muted">${esc(nextTxt)}</p>
+      <div class="xp-track wide"><div style="width:${pct}%"></div></div>
+      <div class="career-ratings">${ticks}</div>
+      <div class="wx-grid debrief-grid">
+        <div><span>SORTIES</span><b>${flown.length}</b></div>
+        <div><span>CAREER</span><b>${career.length}</b></div>
+        <div><span>HOURS</span><b>${hours.toFixed(1)}</b></div>
+        <div><span>DISTANCE</span><b>${fmtNm(nm)}</b></div>
+        <div><span>AIRFIELDS</span><b>${fields.size}</b></div>
+        <div><span>AIRCRAFT</span><b>${acIds.size}</b></div>
+        <div><span>LANDMARKS</span><b>${marks.size}</b></div>
+      </div>
+      ${recent.length ? `<p class="pedia-kicker">MILESTONES</p><ul class="debrief-list">${recent.map((b) => `<li><b>${esc(b.label)}</b> ${esc(b.info)}</li>`).join("")}</ul>` : ""}
+      ${ifrRideHtml(lic)}
+    `;
+  }
+
   function renderLog() {
     const { flown } = flownStats();
     const hours = flown.reduce((s, m) => s + (m.hours || 0), 0);
@@ -2603,7 +4779,7 @@
     const xp = flown.reduce((s, m) => s + (m.xp || 0), 0);
     const rk = rankFor(state.profile.xp || xp);
     const nextTxt = rk.next
-      ? `${state.profile.xp || xp} / ${rk.next.xp} xp → ${rk.next.name}`
+      ? `${state.profile.xp || xp} / ${rk.next.xp} XP → ${rk.next.name}`
       : `${state.profile.xp || xp} XP · GRADE CEILING`;
     const stats = $("#pilot-stats");
     if (stats) stats.innerHTML = `
@@ -2611,7 +4787,7 @@
       <span>${nextTxt}</span>
       <span>${flown.length} flown</span>
       <span>${hours.toFixed(1)} hr</span>
-      <span>${nm.toLocaleString()} nm</span>
+      <span>${fmtNm(nm)}</span>
     `;
     const bar = $("#xp-bar");
     if (bar) {
@@ -2620,7 +4796,8 @@
       const pct = rk.next ? Math.min(100, Math.round((((state.profile.xp || xp) - lo) / Math.max(1, hi - lo)) * 100)) : 100;
       bar.style.width = pct + "%";
     }
-    renderRank();
+      renderRank();
+    renderCareerFile();
     const root = $("#log");
     if (!root) return;
     if (!state.log.length) {
@@ -2629,7 +4806,7 @@
     }
     root.innerHTML = state.log
       .map((m) => {
-        const mode = m.mode === "airline" ? "AIRLINE" : "FREE";
+        const mode = modeTag(m);
         const pay = m.mode === "airline"
           ? `${m.xp || xpFor(m)}xp ${moneyFmt(m.money || 0)}`
           : moneyFmt(m.money || 0);
@@ -2639,7 +4816,7 @@
           <div>
             <b>${icaoOf(m.dep)} → ${icaoOf(m.dest)}</b>
             <span>${fieldCaption(m.dep)} → ${fieldCaption(m.dest)}</span>
-            <span>${mode}${when ? " · " + when : ""} · ${TYPES.find((t) => t.id === m.type)?.label || m.type} · ${m.dist} nm · ${m.acName}${m.flown ? " · flown" : ""} · ${pay}</span>
+            <span>${mode}${when ? " · " + when : ""}${m.grade ? " · " + m.grade + (m.score != null ? " " + m.score : "") : ""} · ${TYPES.find((t) => t.id === m.type)?.label || m.type} · ${fmtNm(m.dist)} · ${m.acName}${m.flown ? " · flown" : ""} · ${pay}</span>
           </div>
           <button class="ghost tiny copy-log" data-id="${m.id}">copy</button>
         </div>`;
@@ -2647,10 +4824,9 @@
       .join("");
   }
 
-  function pctLabel(n, d, extra) {
-    if (!d) return extra ? `0 / 0 ${extra}` : "0 / 0";
-    const pct = Math.round((n / d) * 100);
-    return extra ? `${n} / ${d} ${extra} · ${pct}%` : `${n} / ${d} · ${pct}%`;
+  function pctLabel(n, d) {
+    if (!d) return "0 / 0";
+    return n + " / " + d;
   }
 
   function renderBook() {
@@ -2661,7 +4837,7 @@
     const have = marks.size + cities.size + ports.size;
     const need = LANDMARKS.length + CITIES.length + PORTS.length;
     const overall = $("#book-progress");
-    if (overall) overall.textContent = `PROGRESS ${pctLabel(have, need)}`;
+    if (overall) overall.textContent = need ? `${Math.round((have / need) * 100)}%` : "0%";
     const lmal = $("#landmark-album");
     const lmN = $("#landmark-count");
     if (lmN) lmN.textContent = pctLabel(marks.size, LANDMARKS.length);
@@ -2699,15 +4875,18 @@
   function searchAirports(q) {
     q = (q || "").trim().toUpperCase();
     if (q.length < 2) return [];
+    const rotor = isRotor(state.ac);
     const hits = [];
     for (const a of airports) {
       if (!a || !a.id) continue;
+      if (!rotor && fieldKind(a) === "helipad") continue;
       if (a.id.startsWith(q) || (a.iata && a.iata.startsWith(q))) hits.push(a);
       if (hits.length >= 12) return hits;
     }
     if (q.length >= 3) {
       for (const a of airports) {
         if (hits.includes(a)) continue;
+        if (!rotor && fieldKind(a) === "helipad") continue;
         if ((a.n && a.n.toUpperCase().includes(q)) || (a.c && a.c.toUpperCase().includes(q))) {
           hits.push(a);
         }
@@ -2719,6 +4898,12 @@
 
   function bind() {
     document.addEventListener("pointerdown", () => ensureAudio(), { once: true });
+    document.addEventListener("click", (e) => {
+      const hit = e.target && e.target.closest && e.target.closest(
+        "button, a, label, select, summary, .post, .job, .icon-pick, .file-btn, input[type=checkbox], input[type=radio], input[type=file], input[type=button]"
+      );
+      if (hit) sfx("click");
+    }, true);
     $("#ac-search")?.addEventListener("input", (e) => {
       state.acQuery = e.target.value;
       renderAircraft();
@@ -2743,6 +4928,7 @@
         try { localStorage.setItem("twofly-ac", state.ac.id); } catch {}
       }
       fillTypeSelect();
+      fillJobTypes();
       renderAcMeta();
     });
     $("#ac-select")?.addEventListener("change", (e) => {
@@ -2764,6 +4950,18 @@
       renderAircraft();
     });
     $("#view-desk")?.addEventListener("click", (e) => {
+      const plain = e.target.closest("[data-wx-plain]");
+      if (plain) {
+        const slot = plain.dataset.wxPlain;
+        const box = $(slot === "arr" ? "#wx-arr-body" : "#wx-body");
+        const p = box && box.querySelector(".wx-plain");
+        if (p) {
+          const on = p.hidden;
+          p.hidden = !on;
+          plain.textContent = on ? "HIDE" : "EXPLAIN THIS";
+        }
+        return;
+      }
       const btn = e.target.closest("[data-wx-refresh]");
       if (!btn) return;
       const slot = btn.dataset.wxRefresh;
@@ -2861,10 +5059,10 @@
     }
 
     const runGen = () => {
-      if (state.ac && needsService(state.ac.id)) {
+      if (state.ac && serviceBlocks(state.ac.id)) {
         setMissions([]);
         renderMissions();
-        $("#missions").innerHTML = `<div class="empty">SERVICE DUE ON THIS AIRCRAFT. REPAIR IN HANGAR.</div>`;
+        $("#missions").innerHTML = `<div class="empty">AIRFRAME AT 0% HEALTH. SERVICE IT IN THE HANGAR.</div>`;
         sfx("error");
         return;
       }
@@ -2923,9 +5121,9 @@
       long.hidden = !open;
       more.setAttribute("aria-expanded", open ? "true" : "false");
     });
-    $("#view-book")?.addEventListener("click", (e) => {
+    document.addEventListener("click", (e) => {
       const h = e.target.closest("h3.album-h[data-fold]");
-      if (!h) return;
+      if (!h || !h.closest("#view-book, #view-help")) return;
       const id = h.dataset.fold;
       h.classList.toggle("folded");
       const body = document.querySelector(`[data-fold-body="${id}"]`);
@@ -2964,11 +5162,24 @@
     $("#welcome-go")?.addEventListener("click", () => { sfx("accept"); dismissWelcome(); });
     $("#debrief-go")?.addEventListener("click", () => {
       sfx("click");
+      const go = $("#debrief-go");
+      const wantLog = !!(go && /LOGBOOK/.test(go.textContent));
+      if (showNextSplash()) return;
       const box = $("#debrief");
       if (box) box.hidden = true;
+      if (go) go.textContent = "CONTINUE";
+      const kick = box && box.querySelector(".pedia-kicker");
+      if (kick) kick.textContent = "SORTIE COMPLETE";
+      if (wantLog) {
+        const btn = document.querySelector('#tabs button[data-tab="log"]');
+        if (btn) btn.click();
+      }
     });
     $("#confirm-no").addEventListener("click", () => {
       state.pendingClear = "";
+      state.pendingLease = "";
+      state.pendingBuyout = "";
+      state.pendingAccept = null;
       $("#confirm").hidden = true;
       sfx("click");
     });
@@ -2987,17 +5198,61 @@
         completeMission();
       } else if (kind === "abort") {
         abortMission();
+      } else if (kind === "ifr-accept") {
+        const m = state.pendingAccept;
+        state.pendingAccept = null;
+        if (m) acceptMission({ ...m, ifrAck: true });
+      } else if (kind === "ifr-complete") {
+        if (state.active) state.active.ifrAck = true;
+        completeMission();
+      } else if (kind === "ifr-check") {
+        startCheckride();
       } else if (kind === "log") {
         state.log = [];
         saveLog();
         renderLog();
       } else if (kind === "all") {
         resetAllProgress();
+      } else if (kind === "lease") {
+        const id = state.pendingLease;
+        state.pendingLease = "";
+        const err = leaseAircraft(id);
+        const note = $("#hangar-err");
+        if (err) {
+          sfx("error");
+          if (note) { note.hidden = false; note.textContent = err; }
+        } else {
+          sfx("money");
+          if (note) { note.hidden = true; note.textContent = ""; }
+          renderHangar();
+          renderPilotChip();
+          renderAircraft();
+          renderAirline();
+        }
+      } else if (kind === "buyout") {
+        const id = state.pendingBuyout;
+        state.pendingBuyout = "";
+        const err = buyOutLease(id);
+        const note = $("#hangar-err");
+        if (err) {
+          sfx("error");
+          if (note) { note.hidden = false; note.textContent = err; }
+        } else {
+          sfx("money");
+          if (note) { note.hidden = true; note.textContent = ""; }
+          renderHangar();
+          renderPilotChip();
+          renderAircraft();
+          renderAirline();
+        }
       }
     });
     $("#confirm").addEventListener("click", (e) => {
       if (e.target.id === "confirm") {
         state.pendingClear = "";
+        state.pendingLease = "";
+        state.pendingBuyout = "";
+        state.pendingAccept = null;
         $("#confirm").hidden = true;
       }
     });
@@ -3012,6 +5267,20 @@
     pediaClick($("#landmark-album"), "lm", "lm");
     pediaClick($("#city-album"), "cy", "cy");
     pediaClick($("#airport-album"), "ap", "ap");
+    $("#career-file")?.addEventListener("click", (e) => {
+      if (e.target && e.target.id === "ifr-check") {
+        openConfirm("ifr-check");
+      }
+    });
+    $("#checkride-no")?.addEventListener("click", () => closeCheckride());
+    $("#checkride-body")?.addEventListener("click", (e) => {
+      const btn = e.target.closest(".ride-ans");
+      if (!btn) return;
+      answerCheckride(btn.dataset.i);
+    });
+    $("#checkride")?.addEventListener("click", (e) => {
+      if (e.target.id === "checkride") closeCheckride();
+    });
     $("#tabs").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-tab]");
       if (!btn) return;
@@ -3030,9 +5299,11 @@
       const hang = $("#view-hangar");
       const setv = $("#view-set");
       const logv = $("#view-log");
+      const helpv = $("#view-help");
       if (hang) hang.hidden = tab !== "hangar";
       if (setv) setv.hidden = tab !== "set";
       if (logv) logv.hidden = tab !== "log";
+      if (helpv) helpv.hidden = tab !== "help";
       if (tab === "line") {
         state.acQuery = "";
         const acs = $("#ac-search");
@@ -3099,24 +5370,34 @@
     });
     $("#icon-file")?.addEventListener("change", (e) => {
       const file = e.target.files && e.target.files[0];
+      e.target.value = "";
       if (!file) return;
-      const img = new Image();
-      const url = URL.createObjectURL(file);
-      img.onload = () => {
+      const paint = (src, w, h) => {
+        const SIZE = 320;
         const c = document.createElement("canvas");
-        c.width = 96;
-        c.height = 96;
+        c.width = SIZE;
+        c.height = SIZE;
         const ctx = c.getContext("2d");
-        const s = Math.min(img.width, img.height);
-        ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, 96, 96);
+        ctx.imageSmoothingEnabled = true;
+        if (ctx.imageSmoothingQuality) ctx.imageSmoothingQuality = "high";
+        const s = Math.min(w, h) || 1;
+        const sx = (w - s) / 2;
+        const sy = (h - s) / 2;
+        ctx.drawImage(src, sx, sy, s, s, 0, 0, SIZE, SIZE);
         state.profile.icon = "custom";
-        state.profile.iconData = c.toDataURL("image/jpeg", 0.72);
+        state.profile.iconData = c.toDataURL("image/jpeg", 0.92);
         saveProfile();
         renderAirline();
         renderPilotChip();
-        URL.revokeObjectURL(url);
       };
-      img.src = url;
+      if (window.createImageBitmap) {
+        createImageBitmap(file, { imageOrientation: "from-image" }).then((bmp) => {
+          paint(bmp, bmp.width, bmp.height);
+          if (bmp.close) bmp.close();
+        }).catch(() => ingestPhotoFallback(file, paint));
+      } else {
+        ingestPhotoFallback(file, paint);
+      }
     });
     $("#set-money")?.addEventListener("change", (e) => {
       state.profile.moneyOn = e.target.checked;
@@ -3152,14 +5433,21 @@
       saveProfile();
       if (e.target.checked) sfx("complete");
     });
-    $("#sound-test")?.addEventListener("click", () => {
-      state.profile.soundOn = true;
-      const box = $("#set-sound");
-      if (box) box.checked = true;
+    $("#set-simwatch")?.addEventListener("change", (e) => {
+      state.profile.simWatch = e.target.checked;
       saveProfile();
-      sfx("issue");
-      setTimeout(() => sfx("complete"), 400);
+      pollSim().then(() => { if (state.active) renderActive(); });
     });
+    const hudIn = $("#set-hud");
+    const setHud = (raw) => {
+      const n = clampHud(raw);
+      state.profile.hudScale = n;
+      if (hudIn) hudIn.value = String(n);
+      applyHudScale();
+      saveProfile();
+    };
+    hudIn?.addEventListener("input", (e) => setHud(e.target.value));
+    hudIn?.addEventListener("change", (e) => setHud(e.target.value));
     $("#set-clock")?.addEventListener("change", (e) => {
       state.profile.clock12 = e.target.value === "12";
       saveProfile();
@@ -3167,6 +5455,15 @@
       renderMissions();
       renderActive();
       renderLog();
+    });
+    $("#set-sim")?.addEventListener("change", (e) => {
+      const v = e.target.value;
+      state.profile.sim = v === "20" || v === "24" ? v : "both";
+      saveProfile();
+      if (state.ac && !simOk(state.ac)) state.ac = null;
+      renderAircraft();
+      renderHangar();
+      renderAcMeta();
     });
     $("#set-ccy")?.addEventListener("change", (e) => {
       state.profile.currency = e.target.value;
@@ -3178,9 +5475,15 @@
       renderActive();
       renderLog();
     });
-    $("#set-temp")?.addEventListener("change", (e) => {
-      state.profile.tempUnit = e.target.value === "F" ? "F" : "C";
+    $("#set-units")?.addEventListener("change", (e) => {
+      state.profile.units = e.target.value === "eu" ? "eu" : "us";
       saveProfile();
+      renderDep();
+      renderAcMeta();
+      renderMissions();
+      renderActive();
+      renderLog();
+      renderHangar();
       if (state.dep) loadWx(state.dep, false, "dep");
       if (state.active && state.active.dest) loadWx(state.active.dest, false, "arr");
       else if (state.missions[0] && state.missions[0].dest) loadWx(state.missions[0].dest, false, "arr");
@@ -3192,47 +5495,60 @@
     });
     window.addEventListener("online", () => {
       wxOfflineFlag = false;
-      wxCache.clear();
-      if (state.dep) loadWx(state.dep, true, "dep");
-      if (state.active && state.active.dest) loadWx(state.active.dest, true, "arr");
     });
     $("#mkt-search")?.addEventListener("input", (e) => {
       state.mktQuery = e.target.value;
       renderHangar();
     });
-    $("#view-hangar")?.addEventListener("change", (e) => {
-      const inp = e.target.closest("[data-tail]");
-      if (!inp) return;
-      setTail(inp.dataset.tail, inp.value);
-      inp.value = tailOf(inp.dataset.tail);
-      renderAircraft();
-      renderAcMeta();
-    });
     $("#view-hangar")?.addEventListener("click", (e) => {
       const fly = e.target.closest("[data-fly]");
       const sell = e.target.closest("[data-sell]");
       const buy = e.target.closest("[data-buy]");
+      const lease = e.target.closest("[data-lease]");
+      const ret = e.target.closest("[data-return]");
+      const buyout = e.target.closest("[data-buyout]");
       const repair = e.target.closest("[data-repair]");
       let err = "";
+      let refresh = true;
       if (fly) {
         const ac = AIRCRAFT.find((a) => a.id === fly.dataset.fly);
         if (ac && canSelectAc(ac)) {
           state.ac = ac;
           localStorage.setItem("twofly-ac", ac.id);
           sfx("select");
-          renderAircraft();
-          renderAcMeta();
         }
       } else if (sell) {
         err = sellAircraft(sell.dataset.sell);
-        if (!err) sfx("money");
+        if (!err) {
+          sfx("money");
+          const row = sell.closest(".fleet-row");
+          if (row) row.remove();
+        }
       } else if (buy) {
         err = buyAircraft(buy.dataset.buy);
         if (!err) sfx("money");
+      } else if (lease) {
+        state.pendingLease = lease.dataset.lease;
+        openConfirm("lease");
+        return;
+      } else if (ret) {
+        err = returnLease(ret.dataset.return);
+        if (!err) {
+          sfx("select");
+          const row = ret.closest(".fleet-row");
+          if (row) row.remove();
+        }
+      } else if (buyout) {
+        state.pendingBuyout = buyout.dataset.buyout;
+        openConfirm("buyout");
+        return;
       } else if (repair) {
         err = repairAircraft(repair.dataset.repair);
         if (!err) sfx("select");
-      } else return;
+      } else {
+        refresh = false;
+      }
+      if (!refresh) return;
       if (err) {
         sfx("error");
         const note = $("#hangar-err");
@@ -3246,16 +5562,21 @@
           note.hidden = true;
           note.textContent = "";
         }
+        const lab = $("#fleet-label");
+        if (lab && state.profile) lab.textContent = `FLEET ${state.profile.hangar.length}/${HANGAR_CAP}`;
       }
-      renderHangar();
-      renderPilotChip();
-      renderAircraft();
-      renderAirline();
+      setTimeout(() => {
+        renderHangar();
+        renderPilotChip();
+        renderAircraft();
+        renderAirline();
+      }, 0);
     });
   }
 
   function selectDep(a) {
     if (!a) return;
+    if (fieldKind(a) === "helipad" && !isRotor(state.ac)) return;
     state.dep = a;
     localStorage.setItem("twofly-dep", a.id);
     persistStore();
@@ -3278,21 +5599,22 @@
     });
 
     const typeEl = $("#type");
-    if (typeEl) {
-      typeEl.innerHTML =
-        `<option value="any">ANY AUTHORIZED CATEGORY</option>` +
-        TYPES.map((t) => `<option value="${t.id}">${t.label}</option>`).join("");
-    }
+    if (typeEl) fillJobTypes();
     stampBuild();
 
     const run = (fn) => { try { fn(); } catch (e) { console.error(e); } };
     run(renderAircraft);
     run(renderAcMeta);
     run(renderDep);
+    run(loadWxStore);
     run(() => loadWx(state.dep));
     run(() => {
       if (state.active && state.active.dest) loadWx(state.active.dest, false, "arr");
       else loadWx(null, false, "arr");
+    });
+    run(() => {
+      refreshBriefs(state.missions);
+      if (state.active) refreshBriefs([state.active]);
     });
     run(renderMissions);
     run(renderActive);
@@ -3300,19 +5622,13 @@
     run(renderBook);
     run(renderPilotChip);
     run(renderAirline);
-    run(() => {
-      const n = $("#field-count");
-      if (n) n.textContent = `${airports.length.toLocaleString()} AIRFIELDS ON FILE`;
-    });
     run(renderHangar);
     run(renderSettings);
+    run(applyHudScale);
     run(bind);
     run(tickClock);
     run(() => {
-      if (accrueInterest()) {
-        renderHangar();
-        renderPilotChip();
-      }
+      settleDesk();
     });
     run(persistStore);
     run(maybeWelcome);
@@ -3322,10 +5638,7 @@
 
     setInterval(tickClock, 1000);
     setInterval(function () {
-      if (accrueInterest()) {
-        renderHangar();
-        renderPilotChip();
-      }
+      settleDesk();
     }, 60000);
     setInterval(function () {
       fetch("/__twofly/ping", { cache: "no-store" }).catch(function () {});

@@ -50,7 +50,6 @@ window.TWOFY_PORTS = [
 (function () {
   const extra = [
     {id:"LFLJ", iata:"CVF", n:"Courchevel Altiport", c:"Courchevel", cc:"FR", lat:45.3975, lon:6.6350, el:6583, t:"S", rw:1762, pv:1, lt:0, rg:"ARA"},
-    {id:"SABA", iata:"SAB", n:"Juancho E. Yrausquin Airport", c:"Saba", cc:"BQ", lat:17.6453, lon:-63.2206, el:60, t:"S", rw:1312, pv:1, lt:1, rg:""},
   ];
   const list = window.AIRPORTS || [];
   const have = new Set(list.map((a) => a.id));

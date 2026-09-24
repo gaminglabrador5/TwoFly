@@ -1,0 +1,8 @@
+{
+  "title": "TwoFly",
+  "type": "x:game",
+  "card": "custom",
+  "banner": "/x-banner.jpg",
+  "color": "1A161C",
+  "description": "A dispatch desk for Microsoft Flight Simulator. Issue a tasking, fly it, and log the sortie."
+}

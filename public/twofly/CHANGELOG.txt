@@ -5,6 +5,409 @@ Pack: TwoFly.exe + README.txt + LICENSE + CHANGELOG.txt
 Windows 10/11 64-bit. Double-click. No installer. No Community folder. No sim connection.
 
 --------------------------------------------------------------------------
+23 Sep 2026 — v1.9.31 Stamp art
+--------------------------------------------------------------------------
+- Baked the supplied airport, city, and landmark art. Airport files use the ICAO in capitals.
+- Added ten landmarks that arrived with the art: Charles Bridge, Chrysler Building, Grand Central, Fushimi Inari, Matsumae Castle, Monas, Nazca Lines, Sigiriya, Taos Pueblo, and Denver Union Station.
+- One World Trade Center uses the existing page and the new art.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.30 Credit and leases
+--------------------------------------------------------------------------
+- Loan interest is 8% a year on the amount borrowed. It is not compounded. Unpaid interest stops at 25% of the remaining loan. The switch in Settings still turns it off.
+- Help explains the credit rule.
+- A leased aircraft now logs hours, time to service, and health, and can be serviced.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.29 Weather save
+--------------------------------------------------------------------------
+- A saved METAR stays on the desk until you press Refresh, or until you open an airfield that has no saved report.
+- The first request for a new airfield asks every source at once, so a slow one does not hold the rest.
+- Currency lists the ten most used: US dollar, euro, yen, pound, yuan, Australian dollar, Canadian dollar, Swiss franc, Hong Kong dollar, and Singapore dollar.
+- Simulator sits above the clock, with its note directly underneath.
+- Pilot portraits 9 through 16 are painted to match the first eight.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.28 Help tab
+--------------------------------------------------------------------------
+- The ? tab is now labeled HELP, in line with the other tabs.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.27 Crash detection
+--------------------------------------------------------------------------
+- A normal descent, a turn, or a wing-low landing is no longer logged as a crash.
+- A crash is the simulator crash event, a touchdown of 2200 fpm or steeper, or 5 G on a hard touchdown.
+- Wear and flight hours apply only in Career, and only to an aircraft you own. Free Flight and leases do not wear an airframe.
+- Each completed sortie writes a text report in the logs folder next to TwoFly.exe.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.26 Aircraft availability
+--------------------------------------------------------------------------
+- Put back types that do exist for MSFS: G650, P2012, P.180, Q400, Learjet 45, Bell 429, Citation Mustang, C919, and DC-10.
+- Left out types that are not flyable yet: Fokker 50, Global 7500, 777-9, Lancair Evolution, Stinson L-5, Stinson 108, and Bell 412.
+- Settings has a simulator choice. MSFS 2020 hides 2024-only types. MSFS 2024 hides the C919 and the DC-10. Both shows the full list.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.25 Aircraft list
+--------------------------------------------------------------------------
+- Removed types that are not in MSFS 2020 or MSFS 2024, and are not a third-party addon for those sims.
+- Third-party aircraft that can fly a passenger or cargo job stay, including addons that work on both.
+- The Cessna 188 was removed. It is in the sim, but it cannot carry a passenger or a cargo load.
+- Nothing new was added.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.24 Destination check
+--------------------------------------------------------------------------
+- On landing, Sim Watch reads the aircraft position and checks it against the planned field.
+- A match fills the mission line. Landing somewhere else still completes and still pays. The mission line is lower.
+- You can still issue and fly a tasking from anywhere. Position is not required for the flight to work.
+- The ? tab explains Sim Watch and the sortie rating.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.23 Sortie rating
+--------------------------------------------------------------------------
+- The score card now leads with a letter: S, A, B, C, D, or F, and the reason under it.
+- Five parts: mission, landing, handling, operations, efficiency. The notes say what was seen.
+- Landing rate is scaled by aircraft class. A firm landing does not damage the aircraft. A crash still does.
+- A go-around does not cost points. A bounce does.
+- TwoFly still does not see position, so it does not claim the runway or the field.
+- New marks: Greased It, Professional, Clean Record, Heavy Metal, Rough Day, Go Around.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.22 Touchdown rate
+--------------------------------------------------------------------------
+- Sim Watch reads vertical speed at touchdown.
+- The existing score card gains a LANDING line: feet per minute, then greaser, smooth, firm, hard, or very hard.
+- A greaser or a smooth touchdown does not deduct. Firm is −6, hard is −14, very hard is −24.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.21 Sale price
+--------------------------------------------------------------------------
+- A serviced aircraft sells for 30% under market, not 7%.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.20 Airframe health
+--------------------------------------------------------------------------
+- Each airframe shows a health percent, green at 100% and red at 0%.
+- Health falls from 100% to 25% over 40 hours, then keeps falling at the same rate. TTS stays at 0 after 40 hours.
+- A crash sets health to 0%. At 0% the aircraft cannot take a tasking.
+- Service is available anytime. The bill is higher the worse the health.
+- A serviced aircraft sells for 30% under market. Damage lowers the sale. Hours alone do not.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.19 Desk start
+--------------------------------------------------------------------------
+- Opening the desk in a browser tab resolves its scripts from the page folder, so the desk still starts.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.18 Pilot photos
+--------------------------------------------------------------------------
+- Eight more pilot photos. Four are general aviation, four are airline uniform.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.17 Weather label
+--------------------------------------------------------------------------
+- The weather button now reads EXPLAIN THIS.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.16 Hangar sell
+--------------------------------------------------------------------------
+- Selling or returning an aircraft removes it from the fleet on that click. The row no longer stays until the next selection.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.15 Desk fixes
+--------------------------------------------------------------------------
+- Removed an empty slot in the aircraft list that could throw "reading 'id'" while the desk was starting.
+- A Free Flight tasking keeps its own pay line. Opening Career Mode no longer stamps XP onto it.
+- Choosing a manufacturer now fills that manufacturer's aircraft. The type list no longer stays on the previous maker.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.14 Help tab
+--------------------------------------------------------------------------
+- A ? tab sits after Settings. Each section opens on its own and explains one part of the desk.
+- Pilot name, company, and photo stay in Settings.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.13 US and European units
+--------------------------------------------------------------------------
+- The units choice is US or EUROPEAN.
+- Both keep Celsius, feet for altitude, nautical miles, and knots.
+- US shows runway and elevation in feet, altimeter in inHg, weight in pounds, and visibility in statute miles.
+- European shows runway and elevation in meters, QNH in hPa, weight in kilograms, and visibility in meters.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.12 Header and units
+--------------------------------------------------------------------------
+- The header is the clock and SIM LIVE or SIM OFFLINE. No airfield count, no tail, no aircraft type.
+- The type list drops the manufacturer. The manufacturer stays on its own line.
+- Logbook milestones are the six most recent, newest first.
+- The pilot card reads 598 / 4,000 XP.
+- Settings uses Imperial or Metric instead of a temperature switch. Imperial is feet, nautical miles, pounds, knots, and Fahrenheit. Metric is meters, kilometers, kilograms, km/h, and Celsius.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.11 Desk layout
+--------------------------------------------------------------------------
+- Registration and callsign come from the simulator. There is no hangar tail field.
+- The log tab is LOGBOOK, so it is not confused with CAREER MODE.
+- Departure, aircraft, tasking count, and the pilot card are tighter. Coral is the action color. The airfield count sits under the clock instead of beside it.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.10 In-sim departure removed
+--------------------------------------------------------------------------
+- The IN-SIM POSITION departure is gone. Taskings start from an airfield you pick.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.9 In-sim departure
+--------------------------------------------------------------------------
+- IN-SIM POSITION uses the aircraft's live coordinates as the departure. Ground or air. Destinations are generated from that point the same way as any other field. The typed airfield is left alone and comes back when the box is unchecked.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.8 Sim tail and crash latch
+--------------------------------------------------------------------------
+- Registration comes from the simulator ATC ID. The hangar N-number box is gone. Empty ID shows TAIL UNKNOWN. Sim offline does not invent one.
+- Crash sticks for the sortie. A wing-low arrival, a steep sink, or a high-G impact counts even if MSFS never sends the crash event. Complete reads the sim once more before it scores.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.7 IFR penalty and checkride
+--------------------------------------------------------------------------
+- Career Mode: IFR/LIFR without an Instrument Rating is still legal to fly. Accept and Complete warn first.
+- Completing posts Illegal IFR Operation (−XP) and Safety violation (−money). The Instrument Rating clears both.
+- Career page: sit a 5-question written checkride (4 to pass) to earn the rating early. $12,000 on a pass. Private certificate required. Money off = no fee.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.6
+--------------------------------------------------------------------------
+- Tools menu removed.
+- Clock line reads SIM OFFLINE when MSFS is not running. No extra error copy.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.5 METAR age
+--------------------------------------------------------------------------
+- Nearby fill-in only uses a METAR from the last 90 minutes. KSKX was showing yesterday's Angel Fire freeze (M01/M02) because Taos ASOS is offline. That is not Taos weather.
+- Temperature comes from the selected report's 12/03 group. The remarks T-group can refine it, but cannot override a different report.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.4 desk polish
+--------------------------------------------------------------------------
+- Confirm, debrief, encyclopedia, and welcome sheets use the desk palette, a few percent darker.
+- Settings checkboxes show a hover note for what the switch does.
+- Sim Watch line matches the clock size.
+- METAR looks back 24 hours at the field, then the closest station within 20 nm. Otherwise: NO METAR DATA AVAILABLE.
+- IATA codes off the desk captions. Search still accepts them.
+- Type list no longer repeats cruise speed. ANY DISTANCE replaces AUTO. Brief legs no longer say ~30 min.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.3 progression and real METAR
+--------------------------------------------------------------------------
+- Certificate ladder slowed so ATP is a career, not a night. Private 4,000 XP, Instrument 10,000, Commercial 22,000, ATP 50,000. Certificates already earned are kept.
+- Rank-up pay is larger. Mission pay is higher so a evening of hops actually moves the hangar.
+- Every achievement now posts money (and XP). Certificates still pay on the rank splash, not twice.
+- Weather is METAR only. No generated model. If the field has no current METAR, the desk says so. Nearby real METARs still fill in. Understand This notes the sim sky can disagree.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.2 lease to own
+--------------------------------------------------------------------------
+- Daily lease payments count toward the list price. BUY OUT pays the remainder and the airframe is yours. If payments cover the list, it converts on its own.
+- RETURN is free. You forfeit what you have already paid. Do not charge list price to give it back.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.1 aircraft leases
+--------------------------------------------------------------------------
+- Market listings have LEASE next to BUY. Confirm shows the daily rate. First day is due on confirm; each later calendar day while it sits in the hangar. Return it any time — no sale price. Unpaid days send the airframe back.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.9.0 Career Mode
+--------------------------------------------------------------------------
+- Airline Mode is Career Mode. Free Flight stays the unrestricted sandbox.
+- Certificates: Student → Private → Instrument Rating → Commercial → ATP. Each one unlocks aircraft classes and job types when certificate locks are on.
+- Student: piston, local pax/cargo/reposition. Private: rotor and field resupply. Instrument: express / IFR. Commercial: turboprop, VIP, medevac. ATP: jets.
+- Rank-up splash after Complete, with pay and XP. Achievements also pay on the debrief.
+- CAREER tab holds the pilot file (certificate, progress, hours, fields) and the sortie log.
+- Optional systems unchanged: certificate locks, aircraft cost, maintenance, interest, Sim Watch.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.8.6
+--------------------------------------------------------------------------
+- Sim Watch desk line no longer shows bank angle. Steep-bank still logs on the sortie.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.8.5 live sim state, debrief palette
+--------------------------------------------------------------------------
+- Dashboard Sim Watch line is current state only: LIVE / OFF, airborne or on ground, bank now. Max bank, steep, landing, and crash stay on the sortie log and the complete splash.
+- Complete splash uses the desk colors, a shade darker than the main panels.
+
+--------------------------------------------------------------------------
+22 Sep 2026 — v1.8.4 SimConnect watcher
+--------------------------------------------------------------------------
+- Bank, landing, and crash were silent because the data request used an invalid period (5 instead of SIM_FRAME/SECOND) and a missing CRASH FLAG simvar made every packet too small to read.
+- Watcher now reads ground, bank, airspeed, AGL, vertical speed, and G. Overbank flags at 70° on the first sample. Landing logs when you go airborne then back on the wheels. Crash still uses the sim’s Crashed event, plus a hard-impact / high-G fallback.
+- Header shows SIM LIVE · BANK xx° while watch is on so you can see it is actually talking to the sim.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.8.3 desk type, vis, elevation talk
+--------------------------------------------------------------------------
+- Desk clock and airfield count are twice the size.
+- Weather-model visibility caps at 10+ SM. No more 46-mile METARs.
+- Briefs no longer say a plains field “sits high” just because the elevation is high. Mountain talk is for actual mountain strips (Telluride, Courchevel, Innsbruck…), not Denver International.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.8.2 stale METAR
+--------------------------------------------------------------------------
+- KAXX/KSKX −1 °C was last night’s AUTO (M01/M02 at 0955Z), still published on VATSIM. TwoFly no longer uses a METAR older than 2.5 hours.
+- Temperature is the group in front of the altimeter, or the remarks T-group. RVR can no longer be read as temp.
+- If the field has no fresh METAR, use the local weather model instead of a warm valley station 60 nm away.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.8.1 score, stamps, METAR temp
+--------------------------------------------------------------------------
+- No sortie rating unless SimConnect is actually connected. Mom's 92 was an honor penalty with the watch on and the sim off.
+- When the sim is connected, the debrief lists what cost points (late minutes, steep bank, complete-before-landing, crash).
+- Airport and city postcards unlock from departure or destination in both FREE FLIGHT and AIRLINE MODE (ICAO, IATA, city name, or distance). Existing logs are healed on launch.
+- METAR temperature no longer reads RVR groups like R17/M0150 as −1 °C. Temp and dewpoint are separate. Remarks T-group is the fallback.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.8.0 dispatcher voice
+--------------------------------------------------------------------------
+- Briefings talk like a person again: why the job exists, then weather/field if it actually matters.
+- Weather is live from the METAR. IFR, wind, rain, fog, night, high strips — only when they're true. VFR doesn't pretend it's IFR.
+- Fixed dest weather not reaching the brief (category was read from the wrong object).
+- Hop note under the card is only the high-elevation performance fact. The spoken weather lives in the brief.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.9 shorter briefs
+--------------------------------------------------------------------------
+- Tasking copy is one reason, then stop. No "get them there safely" closers.
+- Hop notes only for IFR, wind, high field, pad, unpaved, night. Municipal/international filler is gone.
+- UNDERSTAND THIS states the category without a lecture. Debrief no longer says "no new achievements."
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.8 why-this-type
+--------------------------------------------------------------------------
+- Dropped the generic "enough seats and enough range" line. Why-this-aircraft only prints when the type actually changes the job (pad, strip, high field, short runway, long jet hop).
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.7 pilot tools
+--------------------------------------------------------------------------
+- TOOLS in the header: NM/SM/KM, knots/mph/km/h, hPa/inHg, reciprocal heading, compass word, ETE estimate (distance + groundspeed).
+- Opens seeded from the current or offered tasking. Labeled estimate — not a flight plan.
+- Weather QNH shows both hPa and inHg.
+- Taskings show reciprocal next to heading (hdg 090° · rec 270°).
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.6 understand the weather
+--------------------------------------------------------------------------
+- UNDERSTAND THIS on the weather slab turns the METAR into plain English (wind direction, visibility, ceiling, altimeter, VFR/IFR).
+- Taskings get a one-line why-this-aircraft note, plus a hop note only when it matters (high field, IFR, night, helipad, unpaved).
+- No encyclopedia. You learn because the dispatch sheet had a reason to tell you.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.5 care-center routing
+--------------------------------------------------------------------------
+- Medevac now aims at the care center for that state or country: hospital pad, then the international, then a regional.
+- Same-state / same-country dests beat a random field over the border.
+- Rotor can still land at the hospital pad next to that international (e.g. UNM instead of Sunport).
+- Nearby ski strips and same-size fields are not patient destinations.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.4 medevac routing
+--------------------------------------------------------------------------
+- Medevac from a small field goes to a hospital or a larger field, not the next strip.
+- Rotor medevac can reach ~220 nm so Taos can go to UNM / Albuquerque, not Angel Fire.
+- Nearby ski towns and same-level fields are no longer patient destinations.
+- Added Christus St. Vincent (Santa Fe) and Memorial Medical (Las Cruces) helipads.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.3 fields and medevac
+--------------------------------------------------------------------------
+- Removed "No connection to the simulator" from the welcome sheet.
+- Remarks classify the destination: bush strip, municipal, regional, international, helipad. Albuquerque is international, not remote.
+- High fields (over 5,000 ft) are called high, not mountain, unless they are over 7,000 ft.
+- Field resupply prefers strips. Internationals are last resort.
+- MEDEVAC taskings. Timed. Patient transfer. Rotor prefers hospital helipads.
+- Helipads are rotor only (helicopter / eVTOL). Airplanes cannot search or depart them.
+- Added 50 hospital helipads (UNM, Denver Health, Harborview, Grady, Royal London, and others).
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.2 sortie score
+--------------------------------------------------------------------------
+- Complete splash shows a 0–100 score from what Watch can actually see: time, ride, crash.
+- CLEAN / GOOD / FAIR / ROUGH / FAIL. Steep bank and late arrivals dock the score. Crash is zero.
+- Honor complete (no sim landing) is marked. Score is stored on the log.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.1 SimConnect.dll
+--------------------------------------------------------------------------
+- Ships 64-bit SimConnect.dll next to TwoFly.exe. No SDK install required.
+- The FSX 32-bit SimConnect.dll will not load. Do not replace the included file with that one.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.7.0 sim watch
+--------------------------------------------------------------------------
+- Optional SIM WATCH (off by default). Background only: crash, steep bank (>70°), landing time. No map.
+- Complete is still a click. If a landing was logged, on-block uses that time, not the click.
+- Crash: no pay, no XP, no collectables. Steep bank is a note only.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.6.5 mixed categories
+--------------------------------------------------------------------------
+- ANY AUTHORIZED CATEGORY now deals a mixed board. Five EXPRESS in a row will not happen unless you pick EXPRESS.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.6.4 field local time
+--------------------------------------------------------------------------
+- Tasking DEP is local to the departure field. ARR is local to the destination. Offset is shown (UTC+7, MDT, etc).
+- Desk clock stays on your computer. Night remarks use field-local hour.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.6.3 logo
+--------------------------------------------------------------------------
+- Replaced the lockup with the corrected mark (spinner rings).
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.6.2 logo
+--------------------------------------------------------------------------
+- Replaced the lockup with the edited mark.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.6.1 logo
+--------------------------------------------------------------------------
+- Header and About use the TwoFly lockup (wordmark, Cessna, Time to fly).
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.6.0 remarks rewrite
+--------------------------------------------------------------------------
+- Removed typing sounds.
+- Removed the debrief line about completing whenever.
+- Mission remarks are plain dispatcher copy: why, one useful detail, done. Weather only when it matters. No fake-literary lines.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.5.9 HUD scale
+--------------------------------------------------------------------------
+- Settings: HUD SCALE slider 100–300% (10% steps). Saves with the pilot file.
+- Removed PLAY SAMPLE. Desk sound toggle remains.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.5.8 typewriter + on-block
+--------------------------------------------------------------------------
+- Typing uses a mechanical typewriter clack (space bar and return are distinct).
+- Airline EXPRESS and VIP are timed. Complete more than 15 minutes after ARR and pay is docked (10% plus 1% per extra minute, cap 50% express / 35% VIP). XP is unchanged. Free Flight is not penalized.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.5.7 dynamic remarks
+--------------------------------------------------------------------------
+- Tasking copy is now a short dispatch remark: why the hop exists, pax/cargo/ferry, honest weather, a closing.
+- Does not repeat ICAO, distance, pay, or aircraft. Weather matches METAR (VFR/MVFR/IFR/LIFR, wind, rain, fog).
+- Remarks refresh once arrival weather is on file.
+
+--------------------------------------------------------------------------
+21 Sep 2026 — v1.5.6 polish
+--------------------------------------------------------------------------
+- Album headings no longer show NM range or 800×600. Total progress is percent only.
+- Generic click on every control. Typewriter ticks in text fields.
+- Issue sound is a rising dispatch chime, not an error buzz.
+- Custom pilot photos store at 320×320, high-quality JPEG (re-upload old photos).
+
+--------------------------------------------------------------------------
 20 Sep 2026 — v1.5.5 desk sound
 --------------------------------------------------------------------------
 - Dispatch-desk sounds on Issue, Accept, Complete, Abort, tabs, hangar, stamps, and achievements.

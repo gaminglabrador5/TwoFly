@@ -21,8 +21,8 @@ import (
 //go:embed all:web
 var webFS embed.FS
 
-const appVersion = "1.5.5"
-const appBuild = "20260921b"
+const appVersion = "1.9.31"
+const appBuild = "20260923i"
 
 func dataDir() string {
 	base := os.Getenv("LOCALAPPDATA")
@@ -218,6 +218,23 @@ func main() {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.WriteHeader(204)
 	})
+	mux.HandleFunc("/__twofly/sim", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(204)
+			return
+		}
+		if r.Method == http.MethodPost {
+			simReset()
+			w.WriteHeader(204)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(simStatusJSON())
+	})
+	mux.HandleFunc("/__twofly/report", handleReport)
 	mux.HandleFunc("/__twofly/version", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
@@ -271,6 +288,7 @@ func main() {
 			logf("serve: %v", err)
 		}
 	}()
+	startSimLoop()
 	if !waitReady(url) {
 		logf("server not ready")
 		alert("TwoFly", "Local desk did not start.")
@@ -278,3 +296,58 @@ func main() {
 	}
 	openWindow(url)
 }
+
+func handleReport(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(204)
+		return
+	}
+	if r.Method != http.MethodPost {
+		w.WriteHeader(405)
+		return
+	}
+	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	if err != nil {
+		http.Error(w, "read", 400)
+		return
+	}
+	var doc struct {
+		Name string `json:"name"`
+		Text string `json:"text"`
+	}
+	if json.Unmarshal(body, &doc) != nil || strings.TrimSpace(doc.Text) == "" {
+		http.Error(w, "bad report", 400)
+		return
+	}
+	name := filepath.Base(strings.TrimSpace(doc.Name))
+	name = strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == '.' {
+			return r
+		}
+		return -1
+	}, name)
+	if name == "" || name == "." || !strings.HasSuffix(strings.ToLower(name), ".txt") {
+		name = time.Now().Format("20060102-150405") + ".txt"
+	}
+	dir := filepath.Join(exeDir(), "logs")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		http.Error(w, "folder", 500)
+		return
+	}
+	full := filepath.Join(dir, name)
+	if !inDir(dir, full) {
+		http.Error(w, "name", 400)
+		return
+	}
+	if err := os.WriteFile(full, []byte(doc.Text), 0644); err != nil {
+		http.Error(w, "write", 500)
+		return
+	}
+	logf("report %s", full)
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprintf(w, `{"ok":true,"file":%q}`, full)
+}
+

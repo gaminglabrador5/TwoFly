@@ -139,6 +139,16 @@ window.TWOFY_LANDMARKS = [
   {id:"taipei101",n:"Taipei 101",lat:25.0330,lon:121.5654,cc:"TW"},
   {id:"hkpeak",n:"Victoria Peak",lat:22.2759,lon:114.1455,cc:"HK"},
   {id:"moai2",n:"Ahu Akivi",lat:-27.1150,lon:-109.3950,cc:"CL"},
+  {id:"charles",n:"Charles Bridge",lat:50.0865,lon:14.4114,cc:"CZ"},
+  {id:"chrysler",n:"Chrysler Building",lat:40.7516,lon:-73.9755,cc:"US"},
+  {id:"grand",n:"Grand Central Terminal",lat:40.7527,lon:-73.9772,cc:"US"},
+  {id:"inari",n:"Fushimi Inari",lat:34.9671,lon:135.7727,cc:"JP"},
+  {id:"matsumae",n:"Matsumae Castle",lat:41.4298,lon:140.1105,cc:"JP"},
+  {id:"monas",n:"Monas",lat:-6.1754,lon:106.8272,cc:"ID"},
+  {id:"nazca",n:"Nazca Lines",lat:-14.6921,lon:-75.1483,cc:"PE"},
+  {id:"sigiriya",n:"Sigiriya",lat:7.9569,lon:80.7597,cc:"LK"},
+  {id:"taospueblo",n:"Taos Pueblo",lat:36.4389,lon:-105.5456,cc:"US"},
+  {id:"unionstation",n:"Denver Union Station",lat:39.7530,lon:-104.9996,cc:"US"},
 ];
 
 window.TWOFY_COUNTRIES = {

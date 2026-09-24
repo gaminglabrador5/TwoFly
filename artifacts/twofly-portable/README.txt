@@ -12,10 +12,14 @@ Installation
 4. Create your pilot.
 5. Fly.
 
-No installer. No Community folder. No simulator connection.
+No installer. No Community folder.
 Windows 10 / 11, 64-bit.
 Uses the Microsoft Edge WebView2 Runtime (already on most Windows 10/11 PCs).
 If TwoFly asks for it: https://go.microsoft.com/fwlink/p/?LinkId=2124703
+
+Optional Sim Watch (off by default) can read MSFS while you fly: crash,
+steep bank, and landing time. No map. SimConnect.dll is included in this
+zip — keep it next to TwoFly.exe. Start MSFS, load a cockpit, then Watch.
 
 Windows SmartScreen
 -------------------
@@ -27,7 +31,7 @@ unknown new executable.
 Use
 ---
 FREE FLIGHT — fly any type. Pay only.
-AIRLINE MODE — hangar fleet. Pay and XP. Certificates
+CAREER MODE — hangar fleet. Pay and XP. Certificates
 (Student Pilot → Private Pilot → Commercial Pilot → ATP).
 
 1. Pick departure and aircraft.
@@ -51,7 +55,7 @@ Optional art next to TwoFly.exe
   stamps/landmarks/<id>.jpg
   stamps/cities/<id>.jpg        800x600
   stamps/airports/<ICAO>.jpg    800x600
-  pilots/1.jpg … 8.jpg
+  pilots/1.jpg … 16.jpg
 
 JPEG first; PNG is accepted as a fallback.
 
@@ -64,4 +68,4 @@ Airfield data: OurAirports (public domain).
 IBM Plex fonts: SIL Open Font License 1.1.
 Not affiliated with Microsoft, Asobo, or any payware studio.
 
-TwoFly v1.5.5
+TwoFly v1.7.3
