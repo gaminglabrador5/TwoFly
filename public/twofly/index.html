@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TwoFly — Dispatch</title>
-  <link rel="icon" href="logo-mark.png?v=1.9.31" />
-  <link rel="stylesheet" href="style.css?v=1.9.31" />
+  <link rel="icon" href="logo-mark.png?v=1.9.69" />
+  <link rel="stylesheet" href="style.css?v=1.9.69" />
 </head>
 <body>
   <div class="wrap">
     <header class="top">
       <div class="brand">
-        <h1 class="logo"><img src="logo.png?v=1.9.31" alt="TwoFly" /></h1>
+        <h1 class="logo"><img src="logo.png?v=1.9.69" alt="TwoFly" /></h1>
         <p class="tiny clock" id="desk-clock"></p>
         <div class="tiny sim-line off" id="sim-line">SIM OFFLINE</div>
       </div>
@@ -41,8 +41,10 @@
         <label for="dep-input">DEPARTURE AIRFIELD</label>
         <div class="dep-search">
           <input id="dep-input" type="text" placeholder="ICAO, NAME, CITY" autocomplete="off" spellcheck="false" />
+          <button type="button" id="dep-random" class="ghost tiny">RANDOM</button>
           <div id="suggest" hidden></div>
         </div>
+        <label class="check"><input id="dep-paved" type="checkbox" /> PAVED RUNWAY ONLY</label>
         <div id="home-row" class="home-row">
           <button type="button" id="go-home" class="ghost tiny">HOME</button>
           <button type="button" id="set-home" class="ghost tiny">SET HOME</button>
@@ -102,11 +104,11 @@
             <label for="hop">LEG LENGTH</label>
             <select id="hop">
               <option value="auto">ANY DISTANCE</option>
-              <option value="brief">BRIEF 18–55 NM</option>
-              <option value="bush">SHORT FIELD 15–90 NM</option>
-              <option value="short">SHORT 70–220 NM</option>
-              <option value="medium">MEDIUM 180–520 NM</option>
-              <option value="long">LONG 450+ NM</option>
+              <option value="brief">BRIEF 15–30 NM</option>
+              <option value="short">SHORT 25–100 NM</option>
+              <option value="medium">MEDIUM 150–300 NM</option>
+              <option value="long">LONG 500–1000 NM</option>
+              <option value="xl">XL 1000+ NM</option>
             </select>
           </div>
           <div>
@@ -161,7 +163,7 @@
     <div id="view-hangar" hidden>
       <p class="tab-blurb">
         <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-        <span class="blurb-long" hidden>Buy, lease, or sell aircraft for CAREER MODE. Daily lease payments count toward ownership; buy it out for the remainder or return it free. Your fleet can hold up to 10 aircraft. Maintenance is tracked for each type. Registration comes from the simulator.</span>
+        <span class="blurb-long" hidden>Buy, lease, or sell aircraft for CAREER MODE. Daily lease payments count toward ownership; buy it out for the remainder or return it free. The hangar starts at 1 aircraft and grows with rank: Private 2, Instrument 4, Commercial 6, ATP 10. Aircraft you already own stay if you are over the cap. Maintenance is tracked for each type. Registration comes from the simulator.</span>
       </p>
       <p class="err" id="hangar-err" hidden></p>
       <section class="panel" id="loan-panel"></section>
@@ -186,79 +188,102 @@
     <div id="view-log" hidden>
       <p class="tab-blurb">
         <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-        <span class="blurb-long" hidden>Your career file is the record of certificates, hours, and sorties. The SORTIE LOG under it lists completed taskings from both FREE FLIGHT and CAREER MODE. Clearing the log only removes its entries. Certificates and collectables are not affected.</span>
+        <span class="blurb-long" hidden>Your career file is the record of certificates, hours, and sorties. Flight History lists completed taskings from both Free Flight and Career Mode. Clearing the log only removes those entries. Certificates and collectables are not affected.</span>
       </p>
       <section class="log-panel">
-        <h2>LOGBOOK
-          <button id="clear-log" class="ghost tiny" type="button">CLEAR LOG</button>
-        </h2>
+        <header class="log-head">
+          <h2>LOGBOOK</h2>
+          <button id="clear-log" class="log-clear" type="button">CLEAR LOG</button>
+        </header>
         <div id="career-file" class="career-file"></div>
-        <div id="pilot-stats" class="pilot-stats"></div>
-        <h3 class="album-h">SORTIE LOG</h3>
+        <h3 class="log-history">FLIGHT HISTORY</h3>
         <div id="log"></div>
       </section>
     </div>
 
     <div id="view-help" hidden>
       <section class="panel help-sheet">
-        <h3 class="album-h" data-fold="help-fly">HOW A FLIGHT WORKS</h3>
-        <div data-fold-body="help-fly">
-          <p>Pick a departure and an aircraft. Issue 1, 3, or 5 taskings. Accept one. Fly that route in the simulator. When you have landed, press Complete. Abort drops it and pays nothing.</p>
-        </div>
-        <h3 class="album-h folded" data-fold="help-free">FREE FLIGHT</h3>
-        <div class="folded" data-fold-body="help-free">
-          <p>Any aircraft on file can be used. Completing a sortie adds the pay to the pilot file. Certificates and hangar ownership do not apply.</p>
+        <h3 class="album-h" data-fold="help-free">FREE FLIGHT</h3>
+        <div data-fold-body="help-free">
+          <p>Choose a departure airport and an aircraft, then issue 1, 3, or 5 taskings. Pick one, fly the route in the simulator, and press <strong>Complete</strong> when you land. If you abort the tasking, it’s dropped and you won’t receive any pay.</p>
+          <p>Any aircraft in the TwoFly aircraft file can be used. Completing a sortie adds the earnings to your pilot file. Certificates and hangar ownership do not apply in Free Flight.</p>
         </div>
         <h3 class="album-h folded" data-fold="help-career">CAREER MODE</h3>
         <div class="folded" data-fold-body="help-career">
-          <p>Only hangar aircraft are offered. A completed tasking pays money and XP. Certificates unlock aircraft classes and mission types when that lock is on. Home field, maintenance, and the loan apply here.</p>
+          <p>Career Mode only offers aircraft you actually have in your hangar. Completing a tasking earns both money and XP. When certificate locks are enabled, earning new certificates unlocks additional aircraft classes and mission types. Your home field, aircraft maintenance, and loan also come into play here. A finished passenger, cargo, or medevac flight can leave one customer review. A crash, an abort, or a reposition does not.</p>
+          <p>Your career progresses through <strong>Student, Private, Instrument, Commercial, and ATP</strong>. Earn XP to move up the ladder.</p>
+          <p>You can still fly in IFR weather without an Instrument Rating, but you'll take a penalty to your pay and XP. The checkride on the Logbook page lets you earn the Instrument Rating early.</p>
         </div>
-        <h3 class="album-h folded" data-fold="help-cert">CERTIFICATES</h3>
-        <div class="folded" data-fold-body="help-cert">
-          <p>The ladder is Student, Private, Instrument, Commercial, then ATP. XP moves you up. You can still fly IFR weather without the Instrument Rating, at a penalty to pay and XP. The checkride on the logbook page can earn that rating early.</p>
-        </div>
-        <h3 class="album-h folded" data-fold="help-hangar">HANGAR</h3>
+        <h3 class="album-h folded" data-fold="help-hangar">AIRCRAFT & MAINTENANCE</h3>
         <div class="folded" data-fold-body="help-hangar">
-          <p>Buy, lease, or sell. A daily lease payment counts toward the price. Buy it out for the rest, or return it free. The fleet holds 10. Hours, time to service, and health apply to owned aircraft and to leases. Health starts at 100% and is 25% after 40 hours, then keeps falling. At 0% the aircraft cannot take a tasking. A crash sets health to 0%. Service anytime. The bill is higher the worse the health. A serviced aircraft sells for 30% under market. Damage lowers the sale.</p>
+          <p>Buy, lease, or sell aircraft from the Hangar. With a lease, your daily payments count toward the aircraft's purchase price. You can either buy it outright by paying the remaining balance or return it without paying anything extra.</p>
+          <p>The hangar starts at 1 aircraft. Private raises it to 2, Instrument to 4, Commercial to 6, and ATP to 10. An airplane you already own stays even if you are over the cap. You cannot add another until you rank up or sell one. Owned and leased aircraft both track flight hours, service time, and overall health.</p>
+          <p>Aircraft start at 100% health. After 40 hours, health drops to 25%, then continues to fall as the aircraft is flown. At 0%, the aircraft can no longer accept taskings. A crash immediately reduces its health to 0%.</p>
+          <p>You can service an aircraft whenever you want. The worse its condition, the more the service will cost. A fully serviced aircraft sells for 30% below its current market value, and damage reduces the sale value further.</p>
         </div>
-        <h3 class="album-h folded" data-fold="help-loan">CREDIT</h3>
+        <h3 class="album-h folded" data-fold="help-loan">LOANS & INTEREST</h3>
         <div class="folded" data-fold-body="help-loan">
-          <p>A withdrawal adds to your balance and to the loan. The rate is 8% a year, charged only on the amount you borrowed. Interest already added does not earn more interest. Unpaid interest stops once it reaches 25% of the remaining loan, so the balance cannot grow on itself. Repayment clears the interest first. Turn interest off in Settings and the amount you owe stays where it is.</p>
+          <p>Taking a withdrawal adds the money to your pilot balance and to your outstanding loan. Interest is charged at 8% per year and only applies to the amount you originally owe. Interest that has already been added does not generate additional interest.</p>
+          <p>Unpaid interest stops accumulating once it reaches 25% of the remaining loan, preventing the balance from growing indefinitely. When you make a repayment, it clears outstanding interest first.</p>
+          <p>If you turn interest off in Settings, your existing amount owed stays exactly where it is.</p>
         </div>
         <h3 class="album-h folded" data-fold="help-book">COLLECTABLES</h3>
         <div class="folded" data-fold-body="help-book">
-          <p>A stamp or postcard unlocks when you complete a sortie that qualifies. Airports count when you depart or arrive there. Cities and landmarks count when the field is close enough. Open an unlocked entry for its page.</p>
+          <p>Stamps and postcards unlock when you complete a sortie that meets their requirements.</p>
+          <p>Airports count when you depart from or arrive at them. Cities and landmarks count when the destination or departure field is close enough to qualify.</p>
+          <p>Once you've unlocked an entry, open it to view its dedicated page.</p>
         </div>
         <h3 class="album-h folded" data-fold="help-log">LOGBOOK</h3>
         <div class="folded" data-fold-body="help-log">
-          <p>Certificates, hours, and the latest milestones are here. The sortie list includes Free Flight and Career. Clearing the log does not clear collectables.</p>
+          <p>The Logbook keeps track of your certificates, flight hours, and latest milestones. Your sortie history includes both Free Flight and Career flights.</p>
+          <p>Clearing your logbook does not remove your unlocked collectables.</p>
         </div>
         <h3 class="album-h folded" data-fold="help-wx">WEATHER</h3>
         <div class="folded" data-fold-body="help-wx">
-          <p>The desk shows the real METAR for the field, or the nearest report within 20 miles. Explain This turns that report into plain language. The sky in the simulator can still disagree.</p>
+          <p>The desk displays the real METAR for the selected field, or the nearest available report within 20 miles.</p>
+          <p><strong>Explain This</strong> turns the METAR into plain language so you don't have to decipher aviation weather code every time. Humanity has invented enough abbreviations already.</p>
+          <p>The weather shown in TwoFly may not perfectly match what you see in the simulator.</p>
         </div>
         <h3 class="album-h folded" data-fold="help-sim">SIM WATCH</h3>
         <div class="folded" data-fold-body="help-sim">
-          <p>Optional, and MSFS only. You can issue, accept, and complete a tasking from anywhere. Sim Watch does not block the flight.</p>
-          <p>When the simulator is running it can note a crash, bank, G, speed, a go-around, a bounce, the landing time, the touchdown rate, and where the aircraft was when it landed. That position is compared with the planned field. You still press Complete. There is no rating when the simulator is offline.</p>
-          <p>A crash is the simulator's own crash, a touchdown of 2200 feet per minute or steeper, or 5 G on a hard touchdown. A descent or a steep turn is not a crash. Each completed sortie writes a text report in the logs folder next to TwoFly. Wear and hours apply only in Career, to an aircraft you own or lease.</p>
+          <p>Sim Watch is optional and only available with Microsoft Flight Simulator. You can issue, accept, and complete a tasking from anywhere while the simulator is running. Sim Watch never prevents you from flying.</p>
+          <p>When connected, TwoFly can detect things such as crashes, steep banks, G-loads, excessive speed, go-arounds, bounces, landing time, touchdown rate, and the aircraft's position when it lands.</p>
+          <p>The landing position is compared with the planned destination. You still have to press <strong>Complete</strong> yourself.</p>
+          <p>If the simulator is offline, TwoFly cannot provide a flight rating.</p>
         </div>
-        <h3 class="album-h folded" data-fold="help-rate">SORTIE RATING</h3>
+        <h3 class="album-h folded" data-fold="help-rate">MISSION RATING</h3>
         <div class="folded" data-fold-body="help-rate">
-          <p>The letter is the whole sortie, not just the landing. S is 95 to 100, exceptional. A is 90 to 94, excellent. B is 80 to 89, good. C is 70 to 79, acceptable. D is 60 to 69, poor. F is under 60, or a crash. The number under the letter is the total.</p>
-          <p>Mission is 25. A landing the sim saw at the planned field is full marks. Landing somewhere else still completes the sortie and still pays, and the mission line is lower. The field counts when you are within about a mile and a half, wider for a long runway.</p>
-          <p>Landing is 30, and it is the largest part. Butter, smooth, firm, hard, rough, or critical. The same rate is judged more kindly in a jet than in a light aircraft. A bounce costs a little. A go-around does not. A firm landing does not damage the aircraft. A crash sets health to zero and the rating to F.</p>
-          <p>Handling is 20. It comes off for a bank past 70 degrees, a high G load, or speed well above the type. Ordinary bumps are left alone.</p>
-          <p>Operations is 15. Flying IFR weather in Career without an Instrument Rating costs part of it. The pay and XP penalty is separate.</p>
-          <p>Efficiency is 10. It compares the planned time with the time until the landing. Being a little off does not matter. It never checks the path you flew, because TwoFly does not follow you on a map.</p>
+          <p>Your final grade represents the entire sortie, not just the landing.</p>
+          <p><strong>S:</strong> 95–100, exceptional<br><strong>A:</strong> 90–94, excellent<br><strong>B:</strong> 80–89, good<br><strong>C:</strong> 70–79, acceptable<br><strong>D:</strong> 60–69, poor<br><strong>F:</strong> Below 60, or a crash</p>
+          <p>The number shown beneath the letter is your final score.</p>
+          <p><strong>Mission: 25 points.</strong> The Mission category checks whether you actually reached the planned destination. A landing detected at the assigned field earns full marks.</p>
+          <p>Landing somewhere else still completes the sortie and still pays, but the Mission score will be lower. TwoFly considers you to have reached the field when you're within roughly 1.5 miles of it, with a wider area allowed for longer runways.</p>
+          <p><strong>Landing: 30 points.</strong> Landing is the largest part of the rating.</p>
+          <p>Touchdowns are classified as <strong>Butter, Smooth, Firm, Hard, Rough,</strong> or <strong>Critical</strong>. The same touchdown rate is judged more gently in a jet than in a light aircraft.</p>
+          <p>A bounce costs a small amount, while a go-around does not hurt your score. A firm landing won't damage the aircraft.</p>
+          <p>A crash sets the aircraft's health to 0% and automatically gives the sortie an F.</p>
+          <p><strong>Handling: 20 points.</strong> Handling measures things such as excessive bank, high G-loads, and speeds well beyond what the aircraft normally cruises at.</p>
+          <p>Going past 70 degrees of bank, pulling excessive G, or flying significantly faster than the aircraft's normal cruise range can reduce this score.</p>
+          <p>Normal turbulence and minor bumps are ignored.</p>
+          <p><strong>Operations: 15 points.</strong> Operations covers how well you followed the conditions of the tasking.</p>
+          <p>In Career Mode, flying in IFR weather without an Instrument Rating reduces this score. The resulting pay and XP penalty is separate from the rating itself.</p>
+          <p><strong>Efficiency: 10 points.</strong> Efficiency compares the planned flight time with the time between departure and landing.</p>
+          <p>Being a little early or late is fine. TwoFly isn't trying to punish you for spending an extra five minutes admiring the scenery.</p>
+          <p>It does not check the route you actually flew, since TwoFly does not continuously track your position on a map.</p>
         </div>
-        <h3 class="album-h folded" data-fold="help-set">SETTINGS</h3>
+        <h3 class="album-h folded" data-fold="help-set">SETTINGS & UNITS</h3>
         <div class="folded" data-fold-body="help-set">
-          <p>Pilot name, company name, and photo stay in Settings. US or European changes runway length, elevation, altimeter, weight, and visibility. Simulator hides types that do not exist for the one you pick. Money, certificate locks, service, and interest can each be turned off. Export a backup before you clear progress.</p>
+          <p>Your pilot name, company name, and profile photo are managed from Settings.</p>
+          <p>The <strong>US</strong> and <strong>European</strong> unit systems change runway length, field elevation, altimeter, weight, and visibility units.</p>
+          <p>When a simulator is selected, TwoFly hides aircraft types that aren't available for that simulator.</p>
+          <p>Money, certificate locks, aircraft service, and loan interest can each be disabled in Settings.</p>
+          <p>Before clearing your progress, export a backup. Future-you will be considerably less annoyed.</p>
         </div>
         <h3 class="album-h folded" data-fold="help-time">TIME</h3>
         <div class="folded" data-fold-body="help-time">
-          <p>The clock at the top is yours. Departure and arrival times on a tasking are local to the airfield. Departure is a suggestion. In Career Mode, a timed arrival pays less if you are late.</p>
+          <p>The clock at the top of the desk uses your local time.</p>
+          <p>Departure and arrival times shown on taskings use the local time at the relevant airport.</p>
+          <p>The departure time is only a suggestion. In Career Mode, however, arriving late can reduce the payout for a timed tasking.</p>
         </div>
       </section>
     </div>
@@ -295,6 +320,7 @@
         <label class="check" data-tip="8% a year on the amount borrowed. Interest already charged does not earn more. Unpaid interest stops at 25% of the remaining loan. Off, the debt does not grow."><input id="set-interest" type="checkbox" /> INTEREST ON DEBT</label>
         <label class="check" data-tip="Clicks and dispatch sounds at the desk."><input id="set-sound" type="checkbox" /> DESK SOUND</label>
         <label class="check" data-tip="Reads MSFS for a crash, bank, G, speed, a go-around, a bounce, landing time, touchdown rate, and whether the landing was at the planned field. It does not stop you flying from somewhere else. You still press Complete. MSFS only."><input id="set-simwatch" type="checkbox" /> SIM WATCH</label>
+        <label class="check" data-tip="One short review after a finished passenger, cargo, or medevac flight. Written from the landing, the weather, and whether you made the field on time. A crash, an abort, or a reposition gets none. Off, no new reviews are added."><input id="set-reviews" type="checkbox" /> CUSTOMER REVIEWS</label>
         <label for="set-hud" class="pad-top">HUD SCALE</label>
         <div class="hud-scale">
           <input id="set-hud" type="range" min="100" max="300" step="10" value="100" />
@@ -341,10 +367,10 @@
       </section>
       <section class="panel about-panel">
         <label>ABOUT</label>
-        <img class="about-logo" src="logo.png?v=1.9.31" alt="TwoFly" />
+        <img class="about-logo" src="logo.png?v=1.9.69" alt="TwoFly" />
         <p>TWOFLY · MIT LICENSE · 2026</p>
         <p>A project designed and directed by gaminglabrador5, with software development assistance from Grok (xAI). Released as freeware. TwoFly is an independent project and is not affiliated with Microsoft or Asobo Studio.</p>
-        <p class="about-ver" id="about-ver">JS v1.9.31</p>
+        <p class="about-ver" id="about-ver">JS v1.9.69</p>
       </section>
     </div>
   </div>
@@ -397,7 +423,6 @@
         <li>Issue a tasking. Fly it in the simulator.</li>
         <li>Return here and press COMPLETE.</li>
       </ol>
-      <p class="muted">Issue a tasking, fly it in the simulator, then mark it complete.</p>
       <footer class="job-foot">
         <button type="button" class="sheet-yes" id="welcome-go">BEGIN</button>
       </footer>
@@ -424,9 +449,9 @@
         .then(function (d) {
           if (!el) return;
           if (d && d.version) el.textContent = "EXE " + d.version + " · " + (d.build || "");
-          else el.textContent = "JS v1.9.31";
+          else el.textContent = "JS v1.9.69";
         })
-        .catch(function () { if (el) el.textContent = "JS v1.9.31"; });
+        .catch(function () { if (el) el.textContent = "JS v1.9.69"; });
       setTimeout(function () {
         if (window.__twoflyReady) return;
         var chip = document.getElementById("pilot-chip");
@@ -436,12 +461,12 @@
       }, 8000);
     })();
   </script>
-  <script src="aircraft.js?v=1.9.31"></script>
-  <script src="landmarks.js?v=1.9.31"></script>
-  <script src="cities.js?v=1.9.31"></script>
-  <script src="ports.js?v=1.9.31"></script>
-  <script src="pedia-copy.js?v=1.9.31"></script>
-  <script src="helipads.js?v=1.9.31"></script>
-  <script src="app.js?v=1.9.31"></script>
+  <script src="aircraft.js?v=1.9.69"></script>
+  <script src="landmarks.js?v=1.9.69"></script>
+  <script src="cities.js?v=1.9.69"></script>
+  <script src="ports.js?v=1.9.69"></script>
+  <script src="pedia-copy.js?v=1.9.69"></script>
+  <script src="helipads.js?v=1.9.69"></script>
+  <script src="app.js?v=1.9.69"></script>
 </body>
 </html>

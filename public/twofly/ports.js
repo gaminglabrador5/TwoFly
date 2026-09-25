@@ -45,6 +45,9 @@ window.TWOFY_PORTS = [
   {id:"LSZS", n:"Samedan / Engadin", icao:"LSZS", aliases:[], lat:46.5341, lon:9.8841, cc:"CH", el:5600, founded:"1937",
     extract:"Engadin Airport at Samedan is a high-altitude general-aviation field in the Upper Engadin, not far from St. Moritz. At about 5,600 feet it is one of the highest paved airports in Europe. The valley is wide and bright, with the mountains of the Bernina group around it, but density altitude and winter inversions still govern the day’s flying. Business jets and touring aircraft use it as a gateway to the ski towns. The Inn River and a string of lakes follow the same valley floor as the runway.",
     fact:"It opened in 1937 as a touring and military strip for the Upper Engadin."},
+  {id:"RJAA", n:"Narita International", icao:"RJAA", aliases:[], lat:35.7686, lon:140.3887, cc:"JP", el:141, founded:"1978",
+    extract:"Narita International sits on the Kanto plain in Chiba Prefecture, about 60 kilometers east of central Tokyo. It opened in 1978, when Haneda no longer had room for the long-haul traffic. The land around it was farms, and rice paddies still come up close to the fence. Two long parallel runways take the heavy jets. For years almost every overseas arrival into Tokyo used this field. Haneda has taken a large share of that flying back, but Narita is still one of the busiest international airports in Asia. On a clear day the approach crosses a patchwork of fields before the terminals appear.",
+    fact:"A rail line runs under the terminals, and most passengers reach Tokyo by train rather than by road."},
 ];
 
 (function () {

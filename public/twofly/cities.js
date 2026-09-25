@@ -63,6 +63,15 @@ window.TWOFY_CITIES = [
   {id:"jkt", n:"Jakarta", lat:-6.2088, lon:106.8456, cc:"ID", founded:"1527",
     extract:"Jakarta sits on the northwest coast of Java, where the Ciliwung River reaches the sea. The city grew from the old port of Sunda Kelapa into Dutch Batavia and eventually modern Jakarta, spreading into one of the world’s largest urban regions. From the air, the density of the city contrasts sharply with the coastline and the surrounding lowlands. Indonesia is planning a new capital on Borneo, in part because this one is crowded and sits so close to the water.",
     fact:"Some northern neighborhoods already sit below sea level and depend on pumps, drainage, and sea defenses."},
+  {id:"bcn", n:"Barcelona", lat:41.3874, lon:2.1686, cc:"ES", founded:"15 BCE",
+    extract:"Barcelona sits on the Mediterranean, between the sea and the Collserola hills. The old city is still packed near the water, and the later Eixample spreads inland as a regular grid of chamfered blocks. Roman Barcino left the street pattern of the Gothic Quarter. The nineteenth century opened the wide avenues around it. From the air the port, the beaches, and Montjuïc at the south end of the harbor make the waterfront easy to read. On a clear day the hills stand behind the roofs.",
+    fact:"The first stone of the Sagrada Família was laid in 1882, and work on the church is still going on."},
+  {id:"kyo", n:"Kyoto", lat:35.0116, lon:135.7681, cc:"JP", founded:"794",
+    extract:"Kyoto lies in a basin among the mountains of western Honshu, with the Kamo River running through the old city. It was Japan’s imperial capital from 794 until the court moved to Tokyo in 1868, and the historic center still follows a loose grid. Temples, shrines, and wooden townhouses sit on the same streets as newer buildings. From the air the city is a bowl of roofs, with forested hills on almost every side. The famous gardens are green pockets inside that bowl, not a separate place out in the country.",
+    fact:"The city was laid out as Heian-kyō, planned in part on the Chinese capital of Chang’an."},
+  {id:"zqn", n:"Queenstown", lat:-45.0312, lon:168.6626, cc:"NZ", founded:"1862",
+    extract:"Queenstown sits on the shore of Lake Wakatipu, on New Zealand’s South Island, with the Remarkables rising on the far side of the water. It began as a gold-rush camp in the 1860s and stayed a small lakeside town rather than growing into a large city. From the air the lake is the main shape on the map, a long deep bend of water with the town packed onto the flat ground at its edge. Winter turns the surrounding ranges into ski country. In summer the same valleys are used for walking, boats, and scenic flights.",
+    fact:"The TSS Earnslaw, a coal-fired steamship launched in 1912, still carries passengers on the lake."},
 ];
 
 window.TWOFY_PEDIA = window.TWOFY_PEDIA || {};

@@ -1,7 +1,7 @@
 /* TwoFly — simple MSFS mission generator */
 (function () {
   window.__twoflyReady = true;
-  const VERSION = "1.9.31";
+  const VERSION = "1.9.69";
   let sessionFlights = 0;
   let sessionHard = 0;
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -156,17 +156,20 @@
     { id: "pax", label: "PAX", emoji: "" },
     { id: "express", label: "EXPRESS", emoji: "" },
     { id: "vip", label: "PRIORITY PAX", emoji: "" },
+    { id: "official", label: "OFFICIAL", emoji: "" },
+    { id: "courier", label: "COURIER", emoji: "" },
+    { id: "rotation", label: "ROTATION", emoji: "" },
     { id: "bush", label: "FIELD RESUPPLY", emoji: "" },
     { id: "medevac", label: "MEDEVAC", emoji: "" },
     { id: "ferry", label: "REPOSITION", emoji: "" },
   ];
 
   const HOPS = {
-    brief: [18, 55],
-    bush: [15, 90],
-    short: [70, 220],
-    medium: [180, 520],
-    long: [450, 1600],
+    brief: [15, 30],
+    short: [25, 100],
+    medium: [150, 300],
+    long: [500, 1000],
+    xl: [1000, 20000],
     auto: null,
   };
 
@@ -204,6 +207,7 @@
     wantCountry: "",
     wantLandmark: "",
     hard: false,
+    depPaved: false,
     acFilter: "all",
     acQuery: "",
     acMaker: "",
@@ -427,6 +431,7 @@
       unlock: ["piston", "bush", "vintage", "airship"],
       types: ["cargo", "pax", "ferry"],
       hopMax: 180,
+      slots: 1,
       jobs: ["Basic piston aircraft", "Local passenger hops", "Light cargo", "Repositioning"],
       note: "Short visual legs and the aircraft that forgive a student.",
       award: { money: 0, xp: 0 },
@@ -436,6 +441,7 @@
       unlock: ["helo", "evtol"],
       types: ["cargo", "pax", "ferry", "bush"],
       hopMax: 320,
+      slots: 2,
       jobs: ["Rotorcraft", "Field resupply", "Remote strips", "Longer passenger work"],
       note: "People and cargo go farther, including unpaved fields and helicopters.",
       award: { money: 2500, xp: 500 },
@@ -445,6 +451,7 @@
       unlock: [],
       types: ["cargo", "pax", "ferry", "bush", "express"],
       hopMax: 520,
+      slots: 4,
       jobs: ["Express cargo", "IFR taskings", "Weather-sensitive deliveries", "Longer routes"],
       note: "Instrument Flight Rules let you fly by reference to the gauges when the weather is down.",
       award: { money: 15000, xp: 400 },
@@ -453,17 +460,19 @@
     {
       n: 4, name: "COMMERCIAL PILOT", xp: 22000,
       unlock: ["turboprop"],
-      types: ["cargo", "pax", "ferry", "bush", "express", "vip", "medevac"],
+      types: ["cargo", "pax", "ferry", "bush", "express", "vip", "medevac", "official", "courier", "rotation"],
       hopMax: 900,
-      jobs: ["Turboprops", "VIP passengers", "Medevac", "Higher-value cargo"],
+      slots: 6,
+      jobs: ["Turboprops", "VIP passengers", "Official flights", "Medevac", "Higher-value cargo"],
       note: "Turboprops and paid passenger work. The flying is the job now.",
       award: { money: 25000, xp: 600 },
     },
     {
       n: 5, name: "ATP", xp: 50000,
       unlock: ["jet", "airliner"],
-      types: ["cargo", "pax", "ferry", "bush", "express", "vip", "medevac"],
+      types: ["cargo", "pax", "ferry", "bush", "express", "vip", "medevac", "official", "courier", "rotation"],
       hopMax: 99999,
+      slots: 10,
       jobs: ["Jets and airliners", "Long-distance express", "High-value passenger work"],
       note: "Airline Transport Pilot. Jets, long legs, and the work that pays like it.",
       award: { money: 60000, xp: 1000 },
@@ -491,6 +500,10 @@
       soundOn: true,
       hudScale: 100,
       simWatch: false,
+      reviewsOn: true,
+      repSum: 0,
+      repN: 0,
+      reviews: [],
       hangar: ["c172g"],
       leases: {},
       lastLeaseAt: Date.now(),
@@ -566,6 +579,10 @@
         soundOn: raw.soundOn !== false,
         hudScale: clampHud(raw.hudScale),
         simWatch: raw.simWatch === true,
+        reviewsOn: raw.reviewsOn !== false,
+        repSum: Number.isFinite(raw.repSum) ? raw.repSum : 0,
+        repN: Number.isFinite(raw.repN) ? raw.repN : 0,
+        reviews: Array.isArray(raw.reviews) ? raw.reviews.slice(0, 5) : [],
         leases: raw.leases && typeof raw.leases === "object" ? raw.leases : {},
         lastLeaseAt: Number(raw.lastLeaseAt) > 0 ? Number(raw.lastLeaseAt) : Date.now(),
         certN: Number.isFinite(raw.certN) ? Math.max(1, Number(raw.certN)) : 0,
@@ -801,7 +818,18 @@
   const SERVICE_HRS = 40;
   const WEAR_DROP = 75;
   const USED_RATIO = 0.7;
-  const HANGAR_CAP = 10;
+  function hangarCap() {
+    const lic = licenseFor(state.profile && state.profile.xp);
+    return (lic && lic.slots) || 1;
+  }
+
+  function hangarFullMsg() {
+    const lic = licenseFor(state.profile && state.profile.xp);
+    const cap = hangarCap();
+    const next = LICENSES.find((l) => l.n === (lic && lic.n) + 1);
+    if (!next) return `HANGAR AT CAPACITY (${cap}).`;
+    return `HANGAR AT CAPACITY (${cap}). ${next.name} RAISES IT TO ${next.slots}.`;
+  }
 
   function sinceService(id) {
     return (state.profile.sinceService && state.profile.sinceService[id]) || 0;
@@ -1114,7 +1142,7 @@
     const ac = AIRCRAFT.find((a) => a.id === id);
     if (!ac) return "AIRCRAFT NOT ON FILE.";
     if (inHangar(id)) return "ALREADY IN HANGAR.";
-    if (state.profile.hangar.length >= HANGAR_CAP) return "HANGAR AT CAPACITY (10).";
+    if (state.profile.hangar.length >= hangarCap()) return hangarFullMsg();
     if (!airlineEligible(ac)) return "NOT AUTHORIZED FOR PASSENGER OR CARGO SERVICE.";
     if (state.profile.locksOn && !classUnlocked(ac.cls)) return "CERTIFICATE DOES NOT AUTHORIZE THIS CLASS.";
     const price = listPrice(ac);
@@ -1138,7 +1166,7 @@
     const ac = AIRCRAFT.find((a) => a.id === id);
     if (!ac) return "AIRCRAFT NOT ON FILE.";
     if (inHangar(id)) return "ALREADY IN HANGAR.";
-    if (state.profile.hangar.length >= HANGAR_CAP) return "HANGAR AT CAPACITY (10).";
+    if (state.profile.hangar.length >= hangarCap()) return hangarFullMsg();
     if (!airlineEligible(ac)) return "NOT AUTHORIZED FOR PASSENGER OR CARGO SERVICE.";
     if (state.profile.locksOn && !classUnlocked(ac.cls)) return "CERTIFICATE DOES NOT AUTHORIZE THIS CLASS.";
     const day = leaseRate(ac);
@@ -1300,27 +1328,51 @@
     return [lo, Math.max(lo + 5, hi)];
   }
 
+  function canMedevac(ac) {
+    if (!ac || ac.cls === "balloon" || ac.cls === "glider") return false;
+    if ((ac.pax || 0) < 1) return false;
+    if (ac.cls === "jet" || ac.cls === "airliner") return false;
+    if (ac.cls === "turboprop") return (ac.pax || 0) <= 19 && (ac.payload || 0) < 8000;
+    return ac.cls === "piston" || ac.cls === "bush" || ac.cls === "vintage" || ac.cls === "helo" || ac.cls === "evtol";
+  }
+
+  function planeTypes(ac) {
+    if (!ac || ac.cls === "balloon" || ac.cls === "glider") return ["ferry"];
+    const seats = (ac.pax || 0) > 0;
+    const heavy = ac.cls === "jet" || ac.cls === "airliner";
+    const pool = ["cargo", "express", "ferry", "courier"];
+    if (seats) pool.push("pax", "vip", "official", "rotation");
+    if (canMedevac(ac)) pool.push("medevac");
+    if (!heavy && (ac.cls !== "turboprop" || (ac.pax || 0) <= 19)) pool.push("bush");
+    return pool;
+  }
+
   function allowedTypes(ac, pref) {
-    let pool = TYPES.map((t) => t.id);
-    if (ac.cls === "balloon" || ac.cls === "glider") pool = ["ferry"];
-    else if (ac.pax === 0) pool = ["cargo", "express", "bush", "ferry"];
-    else if (ac.cls === "jet") pool = ["pax", "vip", "cargo", "express", "ferry"];
-    else if (ac.cls === "bush" || ac.cls === "vintage") pool = ["bush", "cargo", "pax", "express", "medevac", "ferry"];
-    else if (ac.cls === "helo" || ac.cls === "evtol") pool = ["pax", "cargo", "express", "vip", "medevac", "ferry"];
-    else if (ac.cls === "turboprop" && ac.pax >= 8) pool = ["cargo", "pax", "express", "vip", "medevac", "ferry"];
-    else if (ac.cls === "piston" || ac.cls === "turboprop") pool = ["pax", "cargo", "express", "vip", "bush", "medevac", "ferry"];
+    let pool = planeTypes(ac);
     const cap = careerTypeSet();
     if (cap) pool = pool.filter((t) => cap.has(t));
     if (!pool.length) pool = ["ferry"];
     if (pref !== "any" && pool.includes(pref)) return [pref];
-    if (pref !== "any") return pool;
-    return pool;
+    if (pref !== "any") return allowedTypes(ac, "any");
+    return pool.length ? pool : ["ferry"];
   }
 
   function dealTypes(ac, pref, n) {
-    const pool = allowedTypes(ac, pref);
+    let pool = allowedTypes(ac, pref);
+    let locked = pref;
+    if (pref !== "any" && !(pool.length === 1 && pool[0] === pref)) {
+      locked = "any";
+      pool = allowedTypes(ac, "any");
+    }
+    if (militaryName(state.dep)) {
+      const mil = pool.filter(militaryJob);
+      pool = mil.length ? mil : allowedTypes(ac, "any").filter(militaryJob);
+      if (!pool.length) pool = contractTypes(ac);
+      if (!pool.length) pool = ["ferry"];
+      if (!militaryJob(locked)) locked = "any";
+    }
     if (!pool.length) return Array.from({ length: n }, () => "ferry");
-    if (pref !== "any" || pool.length === 1) {
+    if (locked !== "any" || pool.length === 1) {
       return Array.from({ length: n }, () => pool[0]);
     }
     const out = [];
@@ -1334,6 +1386,22 @@
 
   function payloadFor(type, ac) {
     if (type === "ferry") return { kind: "empty", text: "NIL PAYLOAD — REPOSITION", lbs: 0, pax: 0 };
+    if (type === "courier") {
+      const item = pick(["SEALED DISPATCH", "DIPLOMATIC BAG", "ORDERS"]);
+      return { kind: "cargo", pax: 0, lbs: 30, item, text: item };
+    }
+    if (type === "official") {
+      const max = Math.max(1, Math.min(ac.pax || 1, 4));
+      const n = Math.random() < 0.62 ? 1 : 1 + Math.floor(Math.random() * max);
+      const lbs = Math.min(ac.payload || 400, n * 190);
+      return { kind: "pax", pax: n, lbs, item: "OFFICIAL", text: n === 1 ? `1 OFFICIAL / ${lbs} LB` : `${n} OFFICIALS / ${lbs} LB` };
+    }
+    if (type === "rotation") {
+      const max = Math.max(1, ac.pax || 1);
+      const n = Math.max(1, Math.min(max, 2 + Math.floor(Math.random() * max)));
+      const lbs = Math.min(ac.payload || 400, n * 200);
+      return { kind: "pax", pax: n, lbs, text: `${n} DUTY PAX / ${lbs} LB` };
+    }
     if (type === "medevac") {
       const lbs = Math.min(ac.payload, 420 + Math.floor(Math.random() * 80));
       return { kind: "pax", pax: 1, lbs, item: "MEDICAL TEAM", text: `1 PATIENT / ${lbs} LB MEDICAL` };
@@ -1371,8 +1439,44 @@
     return raw;
   }
 
+  function militaryName(a) {
+    const n = String((a && a.n) || "").toLowerCase();
+    return /air force|\bafb\b|\braf\b|\bnas\b|air base|airbase|\bmilitary\b|army air|naval air|marine corps|\baaf\b|fliegerhorst|luftwaffe/.test(n);
+  }
+
+  function militaryJob(type) {
+    return type === "official" || type === "courier" || type === "rotation" || type === "cargo" || type === "medevac";
+  }
+
+  function contractTypes(ac) {
+    return ["official", "courier", "rotation"].filter((t) => {
+      const got = allowedTypes(ac, t);
+      return got.length === 1 && got[0] === t;
+    });
+  }
+
   function isRotor(ac) {
     return !!(ac && (ac.cls === "helo" || ac.cls === "evtol"));
+  }
+
+  function isAmphib(ac) {
+    const n = ((ac && (ac.name || "") + " " + (ac.id || "")) || "").toLowerCase();
+    return /goose|albatross|seastar|seaplane|floatplane|amphib/.test(n);
+  }
+
+  function listedRunway(a) {
+    const rw = (a && a.rw) || 0;
+    if (rw > 0) return rw;
+    const k = fieldKind(a);
+    if (k === "helipad" || k === "seaplane") return 0;
+    return 1500;
+  }
+
+  function runwayTooShort(a, ac, frac) {
+    if (!ac || isRotor(ac) || !(ac.minRwy > 0)) return false;
+    const len = listedRunway(a);
+    if (!(len > 0)) return false;
+    return len < ac.minRwy * (frac || 1);
   }
 
   function fieldKind(a) {
@@ -1438,6 +1542,22 @@
 
   function destFit(type, a, ac, dist) {
     const k = fieldKind(a);
+    if (type === "rotation") {
+      if (!militaryName(a)) return -999;
+      if (k === "helipad" && !isRotor(ac)) return -999;
+      return 84;
+    }
+    if (type === "official" || type === "courier") {
+      if (k === "helipad" && !isRotor(ac)) return -999;
+      if (militaryName(a)) return type === "official" ? 90 : 78;
+      if (k === "international") return 80;
+      if (k === "regional") return 66;
+      if (k === "municipal") return 52;
+      if (k === "strip") return 24;
+      if (k === "helipad") return 70;
+      return 40;
+    }
+    if (militaryName(a) && !militaryJob(type)) return -999;
     const rotor = isRotor(ac);
     const d = dist || 0;
     const loc = careLocale(state.dep, a);
@@ -1449,7 +1569,7 @@
         if (fromPad && d < 20) return 28;
         return 160 + (loc.rg ? 80 : loc.cc ? 28 : 0) + near;
       }
-      return 75;
+      return 32;
     }
     if (type === "bush") {
       if (k === "strip") return 95;
@@ -1462,6 +1582,7 @@
       const from = careRank(state.dep);
       const to = careRank(a);
       if (k === "strip") return -1;
+      if (militaryName(a) && k !== "helipad") return 120;
       if (to < from && k !== "helipad") return 4;
       if (k === "international") return 130 + (loc.rg ? 90 : loc.cc ? 35 : 0) + near;
       if (k === "regional") return 48 + (loc.rg ? 45 : loc.cc ? 12 : 0) + near * 0.5;
@@ -1486,7 +1607,7 @@
     if (type === "medevac") {
       const care = list.filter((c) => {
         const k = fieldKind(c.a);
-        return k === "helipad" || k === "international" || k === "regional";
+        return k === "helipad" || k === "international" || k === "regional" || militaryName(c.a);
       });
       if (care.length) list = care;
     }
@@ -1523,6 +1644,54 @@
         `There's a patient who needs a higher level of care in ${place}.`,
         `Air ambulance to ${place}. They're transferring to a hospital there.`,
         `You've got a medevac going to ${place}.`,
+        `A patient needs to be transferred to ${place}.`,
+        `Medical transfer to ${place}. Time matters.`,
+        `There's a patient waiting for transport to ${place}.`,
+        `You've got a medical transfer on the board. Destination: ${place}.`,
+        `A patient needs care in ${place}. You're taking them there.`,
+        `Medical transport to ${place}. Get them there safely and keep the approach steady.`,
+        `Someone needs a hospital in ${place}. You've got the flight.`,
+      ]);
+    }
+    if (type === "official") {
+      if (n <= 1) return pick([
+        `A general is expected in ${place}. Keep the ride quiet.`,
+        `There's a minister on the board for ${place}. The arrival should look planned.`,
+        `A head of state needs to be in ${place}. No surprises.`,
+        `You've got an ambassador going to ${place}. Treat it like the airplane is being watched.`,
+        `One official passenger for ${place}. They're not up here for the view.`,
+        `A flag officer is going to ${place}. Make the approach look routine.`,
+        `There's a president on this one. Destination ${place}. Smooth, and on time.`,
+        `Priority passenger with a title, headed to ${place}.`,
+      ]);
+      return pick([
+        `${n} officials are going to ${place}. This is not a sightseeing hop.`,
+        `A delegation of ${n} is booked for ${place}. Keep the cabin settled.`,
+        `You've got ${n} people from an official party. Their destination is ${place}.`,
+        `${n} passengers, and one of them outranks the weather. ${place}.`,
+        `An official party of ${n} is going to ${place}. Nothing about this one is casual.`,
+      ]);
+    }
+    if (type === "courier") {
+      return pick([
+        `A sealed dispatch needs to be in ${place}. It does not leave your sight.`,
+        `There's a pouch for ${place}. Someone will meet you on the ramp.`,
+        `Orders are going to ${place}. Don't set them down.`,
+        `You've got a diplomatic bag for ${place}. It rides up front with you.`,
+        `A courier run to ${place}. The cargo is paper, and it still matters.`,
+        `There's a case for ${place}. You hand it to a person, not a warehouse.`,
+        `${place} is waiting on a sealed bag. You're the courier.`,
+      ]);
+    }
+    if (type === "rotation") {
+      const crew = n > 1 ? n : "";
+      return pick([
+        `A duty change is going to ${place}. They're not on holiday.`,
+        crew ? `${crew} personnel are rotating through ${place}.` : `Personnel are rotating through ${place}.`,
+        `You've got a crew change for ${place}. Get them there and let them sleep.`,
+        crew ? `Relief crew for ${place}. ${crew} people, and they've already had a long week.` : `Relief crew for ${place}. They've already had a long week.`,
+        `There's a rotation into ${place}. The next watch is waiting on them.`,
+        crew ? `${crew} people are due at ${place}. No speeches, just the flight.` : `People are due at ${place}. No speeches, just the flight.`,
       ]);
     }
     if (type === "pax") {
@@ -1530,34 +1699,75 @@
         `Someone needs a ride to ${place}.`,
         `One passenger is waiting for a flight to ${place}.`,
         `You've got a passenger going to ${place}.`,
+        `One passenger, one destination: ${place}.`,
+        `There's a passenger waiting on the ramp for ${place}.`,
+        `One passenger needs to get over to ${place}.`,
+        `You've got one person booked for ${place}. Try not to make them regret choosing air travel.`,
+        `One passenger is ready to go to ${place}. The airplane is waiting on you.`,
+        `There's one passenger on the board for ${place}. Nice and simple.`,
+        `You've got a single passenger heading to ${place}. Easy money, if you behave yourself.`,
       ]);
       return pick([
         `${n} passengers are heading to ${place} and need a ride over.`,
         `There are ${n} passengers waiting for a flight to ${place}.`,
         `You've got a flight going to ${place} with ${n} passengers.`,
+        `${n} passengers are booked for ${place}.`,
+        `You've got ${n} people waiting to head over to ${place}.`,
+        `A group of ${n} passengers is ready for the trip to ${place}.`,
+        `${n} passengers are waiting on the ramp. Their destination is ${place}.`,
+        `You've got ${n} passengers and one job: get them to ${place}.`,
+        `${n} people are counting on you to get them to ${place} without making the trip interesting.`,
+        `${n} passengers are headed to ${place}. Smooth flight, happy passengers.`,
       ]);
     }
     if (type === "vip") {
       if (n <= 1) return pick([
         `Priority passenger heading to ${place}. They'd like a smooth ride.`,
         `One passenger needs a ride to ${place}. Nothing fancy, just treat it like a charter.`,
+        `You've got a priority passenger going to ${place}. Keep things comfortable.`,
+        `One priority passenger is booked for ${place}. They'd prefer not to spend all afternoon bouncing around.`,
+        `Priority passenger for ${place}. Give them the nice flight.`,
+        `One passenger is heading to ${place} on priority service. Keep the ride smooth.`,
+        `You've got one priority passenger aboard. Destination: ${place}. Make a good impression.`,
+        `Priority passenger going to ${place}. No pressure. Just don't give them a story to tell afterward.`,
       ]);
       return pick([
         `${n} passengers are heading to ${place} and need a ride over.`,
         `Priority flight to ${place} with ${n} passengers.`,
+        `You've got ${n} priority passengers headed to ${place}.`,
+        `${n} passengers are booked on a priority flight to ${place}.`,
+        `Priority passengers are waiting for ${place}. There are ${n} of them.`,
+        `${n} priority passengers are ready to go. Their destination is ${place}.`,
+        `You've got ${n} passengers aboard and a priority destination: ${place}.`,
+        `Priority trip to ${place} with ${n} passengers. Keep it smooth.`,
       ]);
     }
     if (type === "express") {
       return pick([
         `A delivery of ${item} needs to get to ${place} today.`,
         `There's a shipment of ${item} headed to ${place}. Time matters on this one.`,
-        `${item} headed to ${place}. Don't linger on the ramp.`,
+        `${item.charAt(0).toUpperCase() + item.slice(1)} headed to ${place}. Don't linger on the ramp.`,
+        `This shipment of ${item} needs to reach ${place} sooner rather than later.`,
+        `You've got an express load of ${item} for ${place}.`,
+        `${item.charAt(0).toUpperCase() + item.slice(1)} needs to be in ${place} today. The clock is running.`,
+        `There's no sightseeing requirement on this one. ${item} needs to get to ${place}.`,
+        `This one's moving on the fast track. ${item} is headed to ${place}.`,
+        `The shipment is ready, the destination is ${place}, and somebody is waiting on it.`,
+        `You've got ${item} going to ${place}. Try not to let the day get away from you.`,
       ]);
     }
     if (type === "bush") {
       return pick([
         `A few boxes of ${item} are headed out to ${place}.`,
         `There's a shipment of ${item} headed to ${place}.`,
+        `${place} is waiting on a delivery of ${item}.`,
+        `Supplies are going into ${place}. You're carrying ${item}.`,
+        `A field crew is waiting on ${item} in ${place}.`,
+        `You've got a resupply run to ${place}. ${item} is going along for the ride.`,
+        `There's a remote outpost waiting on ${item}. Destination: ${place}.`,
+        `The folks at ${place} are running low. You've got ${item} for them.`,
+        `Time for a supply run. ${item} is headed to ${place}.`,
+        `Someone out there needs supplies, and apparently you're the delivery service today.`,
       ]);
     }
     if (type === "ferry") {
@@ -1565,18 +1775,36 @@
         `The aircraft needs to be moved over to ${place}.`,
         `The aircraft is needed in ${place}, so you're taking it over there empty.`,
         `You're taking this one empty to ${place}.`,
+        `This aircraft needs to be in ${place} for its next job.`,
+        `No passengers, no cargo. Just move the aircraft to ${place}.`,
+        `You've got an empty reposition to ${place}.`,
+        `The airplane needs to be somewhere else. That somewhere is ${place}.`,
+        `This one's a simple ferry. Destination: ${place}.`,
+        `Nothing to pick up, nothing to drop off. Just get the aircraft to ${place}.`,
+        `The next job is waiting in ${place}. Your job is getting the airplane there.`,
       ]);
     }
     return pick([
       `There's a shipment of ${item} headed to ${place}.`,
       `A delivery of ${item} is ready to go to ${place}.`,
       `A few boxes of ${item} are headed out to ${place}.`,
+      `You've got a load of ${item} going to ${place}.`,
+      `${item.charAt(0).toUpperCase() + item.slice(1)} needs a ride to ${place}.`,
+      `There's some ${item} waiting on the ramp for ${place}.`,
+      `The folks in ${place} are waiting on a shipment of ${item}.`,
+      `We've got ${item} going out to ${place}. Nothing unusual, just get it there.`,
+      `This load of ${item} has a destination: ${place}.`,
+      `There's a delivery waiting for ${place}. You're taking ${item}.`,
+      `The ramp crew has a shipment of ${item} ready for ${place}.`,
+      `You've got boxes, you've got an airplane, and you've got a destination: ${place}. The boxes contain ${item}.`,
+      `Someone in ${place} is expecting ${item}. You're their ride.`,
     ]);
   }
 
   function wxTalk(dest) {
     const w = wxBits(dest);
     if (!w.cat) return "";
+    const place = placeName(dest);
     const windy = (w.gustKt || 0) >= 22 || (w.windKt || 0) >= 18;
     const wx = String(w.wx || "").toUpperCase();
     const precip = /TS/.test(wx) ? "storms" : /SN|GR/.test(wx) ? "snow" : /RA|DZ|SH/.test(wx) ? "rain" : /FG/.test(wx) ? "fog" : /BR/.test(wx) ? "mist" : /HZ|FU/.test(wx) ? "haze" : "";
@@ -1584,43 +1812,96 @@
       return pick([
         "It's pretty socked in at the destination. Give yourself extra room on the approach.",
         "The weather at the other end is poor. Don't count on seeing the field until late.",
+        `It's not exactly postcard weather at ${place}. Plan the instrument approach carefully.`,
+        "The destination is buried in low conditions. Instruments are your friend today.",
+        "Visibility is down and the ceiling isn't helping. Be ready for an instrument arrival.",
+        `${place} is having one of those days. Don't expect to see the runway from very far out.`,
+        "The field is socked in. Trust the instruments and fly the approach you planned.",
       ]);
     }
     if (w.cat === "IFR") {
       return pick([
         "Visibility isn't great around the destination. You'll want instruments on the way in.",
         "It's IFR at the destination, so plan the arrival rather than looking for the field.",
+        "Conditions are below VFR at the other end. Plan accordingly.",
+        "The destination is sitting in the clouds. Time to let the instruments do their job.",
+        `Not much of a view waiting for you at ${place}. Fly the approach and let the runway come to you.`,
+        "The weather has closed the curtains at the other end. Expect an instrument arrival.",
       ]);
     }
-    if (precip === "storms") return "There are thunderstorms in the area. Give them a wide berth.";
-    if (precip === "snow") return "There's snow at the destination, so watch the runway.";
-    if (precip === "fog") return "There's fog around the destination. Leave yourself some extra time inbound.";
+    if (precip === "storms") return pick([
+      "There are thunderstorms in the area. Give them a wide berth.",
+      "Cells are moving through the area. Don't go sightseeing through them.",
+      "There's some serious weather around the destination. Keep your distance from the cells.",
+      "Thunderstorms are active along the route. Pick your way around them.",
+      `The sky is putting on a show near ${place}. Admire it from a safe distance.`,
+      "There's weather building around the destination. Leave yourself some options.",
+      "A few cells have decided to make your flight more interesting. Give them room.",
+    ]);
+    if (precip === "snow") return pick([
+      "There's snow at the destination, so watch the runway.",
+      `Snow is falling around ${place}. Take a little extra care on arrival.`,
+      "The destination is getting a winter makeover. Keep the runway in mind.",
+      "There's snow around the field. Your landing roll may have opinions about this.",
+      `Winter has arrived at ${place}. Plan the arrival accordingly.`,
+    ]);
+    if (precip === "fog") return pick([
+      "There's fog around the destination. Leave yourself some extra time inbound.",
+      "The destination is sitting in fog. Visibility may not improve until late.",
+      "There's a blanket of fog around the field. Don't expect to see much on the way in.",
+      `Fog is hanging around ${place}. Keep the approach tidy.`,
+      "The runway is somewhere under that fog. Fortunately, that's what approaches are for.",
+    ]);
     if (windy) {
       return (w.gustKt || 0) > (w.windKt || 0) + 3
         ? pick([
           "There's a bit of wind along the route, gusty on the way in, so the approach may take a little more work.",
           "It's gusty at the destination. Keep some extra speed in your pocket for the arrival.",
+          "The wind is getting lively at the other end. Be ready for a little work on final.",
+          `It's breezy enough at ${place} to keep things interesting.`,
+          "The destination has some attitude today. Watch the gusts on arrival.",
         ])
-        : "There's a bit of wind at the destination, so the approach may take a little more work than usual.";
+        : pick([
+          "There's a bit of wind at the destination, so the approach may take a little more work than usual.",
+          "The wind is up at the other end. Nothing dramatic, but keep it in mind.",
+          `There's a steady wind at ${place}. Pick your runway carefully and settle in.`,
+          "It's blowing at the destination. Not necessarily a problem, just something to respect.",
+          "The wind is having its say at the other end today.",
+        ]);
     }
     if (w.cat === "MVFR") {
       return pick([
         "It's a little murky at the destination. Nothing unusual, just keep an eye on it.",
         "Conditions are a little unsettled at the other end, so keep an eye on them.",
+        `It's marginal at ${place}. Should be manageable, but don't get complacent.`,
+        "The weather is sitting in that annoying middle ground. Keep an eye on conditions.",
+        "It's not quite beautiful weather at the other end, but it's nothing to panic about.",
       ]);
     }
     if (precip === "rain") {
       return pick([
         "There's a little rain at the destination. Shouldn't be a problem.",
         "It's wet at the other end. Nothing dramatic.",
+        `A bit of rain is moving through ${place}. Expect a wet arrival.`,
+        "The destination is getting some rain. Nothing the airplane hasn't seen before.",
+        "Bring your windshield wipers. It's wet at the other end.",
       ]);
     }
-    if (precip === "haze" || precip === "mist") return "It's a bit hazy at the destination, but you should still see the field.";
+    if (precip === "haze" || precip === "mist") return pick([
+      "It's a bit hazy at the destination, but you should still see the field.",
+      `There's some haze around ${place}. Visibility should still be reasonable.`,
+      "A little mist is hanging around the field. Keep an eye on visibility.",
+      "The destination is a little hazy today. Nothing unusual, just don't expect perfect visibility.",
+    ]);
     if (w.cat === "VFR" && Math.random() < 0.62) {
       return pick([
         "The weather is behaving itself for once.",
         "Weather looks good, so it should be an easy trip.",
         "The forecast looks good, although things can change once you're up there.",
+        "Clear skies and a destination that isn't trying to hide from you. Enjoy it.",
+        "Conditions look good at the other end.",
+        "Nothing dramatic in the weather today. Just point the airplane and enjoy the view.",
+        "The weather decided to cooperate. Take the win.",
       ]);
     }
     return "";
@@ -1629,38 +1910,140 @@
   function fieldTalk(type, dest, dist, m) {
     if (!dest) return "";
     const kind = fieldKind(dest);
-    if (kind === "helipad") return "You're landing on a pad, not a runway.";
+    const place = placeName(dest);
+    if (kind === "helipad") return pick([
+      "You're landing on a pad, not a runway.",
+      "No runway waiting for you on this one. You're going into a pad.",
+      "This one ends on a helipad. Plan accordingly.",
+      `You're going into a pad at ${place}. Keep the landing area in mind.`,
+    ]);
     if (kind === "strip" || !dest.pv) {
       return pick([
         "It's a short strip. Make sure you're set up before you get there.",
         "The destination is a little more remote than usual. Take your time with the approach.",
+        "Short runway ahead. Have your landing plan sorted before you arrive.",
+        "It's not exactly an airport with miles of pavement. Set yourself up early.",
+        "The runway is short and probably isn't interested in giving you a second chance.",
       ]);
     }
     if (isMountainField(dest)) {
-      return "The destination is tucked into the mountains, so the approach deserves a little attention.";
+      return pick([
+        "The destination is tucked into the mountains, so the approach deserves a little attention.",
+        "You're heading into the mountains. Keep an eye on the terrain on arrival.",
+        `There's plenty of terrain around ${place}. Don't leave the planning until final.`,
+        "It's a mountain field. Beautiful scenery, less room for mistakes.",
+        "The destination is tucked away in the mountains. Pick your approach carefully.",
+        "Mountains on the horizon, runway somewhere in the middle. Plan ahead.",
+      ]);
     }
     if (isNightHop(m)) {
       return pick([
         "It's a late one. The route is straightforward, but you'll be making most of it after dark.",
         "You'll be making most of this one after dark.",
+        "This one's going to be a night flight. Make sure you're ready for the arrival.",
+        "The sun won't be joining you for this one.",
+        "You're heading out after dark. Time to see how good those runway lights really are.",
+        `It's a nighttime run to ${place}. The world looks a little different from up there.`,
       ]);
     }
-    if (type === "medevac" && Math.random() < 0.55) return "Time matters, but so does a stable approach.";
-    if (dist && dist < 80 && Math.random() < 0.7) return "It's a short flight, so this one should be fairly straightforward.";
-    if (dist && dist > 350 && Math.random() < 0.7) return "It's a longer trip than most of the jobs on the board.";
+    if (type === "medevac" && Math.random() < 0.55) return pick([
+      "Time matters, but so does a stable approach.",
+      "There's a patient onboard. Get there promptly, but keep the arrival under control.",
+      "The destination is important, but don't let the clock rush the approach.",
+      "Get them there quickly and safely. Smooth hands on the controls.",
+    ]);
+    if (dist && dist < 80 && Math.random() < 0.7) return pick([
+      "It's a short flight, so this one should be fairly straightforward.",
+      `It's a quick hop over to ${place}.`,
+      "Not much time in the air on this one.",
+      "Short trip. You'll be there before you know it.",
+      "This one's barely a trip by aviation standards. You're going to be there quickly.",
+      `Quick hop to ${place}. Don't blink or you'll miss it.`,
+    ]);
+    if (dist && dist > 350 && Math.random() < 0.7) return pick([
+      "It's a longer trip than most of the jobs on the board.",
+      "This one's going to take a while. Settle in and enjoy the flight.",
+      "You've got some distance to cover on this one.",
+      "It's a long haul compared with most of the jobs on the board.",
+      "This one will give the autopilot something to do.",
+      `You've got a fair bit of sky between here and ${place}.`,
+      "This isn't a quick hop. Pack a little patience.",
+      "Long one today. Plenty of time to enjoy the scenery.",
+    ]);
     return "";
   }
 
   function closeTalk(type) {
     if (Math.random() > 0.38) return "";
+    if (type === "official") return pick([
+      "Make the arrival look routine.",
+      "They're on a schedule. So are you.",
+      "Smooth, quiet, and on the numbers.",
+      "Get them there. No stories afterward.",
+    ]);
     if (type === "pax" || type === "vip") {
-      return pick(["Get them there comfortably.", "Keep the arrival smooth."]);
+      return pick([
+        "Get them there comfortably.",
+        "Keep the arrival smooth.",
+        "Give them a good flight.",
+        "Get them there safely and comfortably.",
+        "Make it a flight they'll remember for the right reasons.",
+        "Smooth trip, happy passengers.",
+        "Get them there in one piece and preferably smiling.",
+      ]);
     }
-    if (type === "ferry") return "Just get it there and you're done.";
-    if (type === "express") return "Get it there on time.";
-    if (type === "medevac") return "Keep it stable and get them in.";
-    if (type === "bush") return "Take your time with the approach.";
-    return pick(["Get it there in one piece.", ""]);
+    if (type === "courier") return pick([
+      "Hand it to the person waiting.",
+      "The bag gets there unopened.",
+      "Don't leave it on the wing.",
+      "Someone is waiting for that case. Don't be late with it.",
+    ]);
+    if (type === "rotation") return pick([
+      "Get them there. The next watch is theirs.",
+      "They're expected. Don't make them later.",
+      "Drop the crew and you're done.",
+    ]);
+    if (type === "ferry") return pick([
+      "Just get it there and you're done.",
+      "Get the aircraft where it needs to be.",
+      "Nothing fancy. Just deliver the aircraft.",
+      "Drop it off and you're finished.",
+      "No passengers, no cargo, no drama. Just get it there.",
+      "Park it at the other end and call it a day.",
+    ]);
+    if (type === "express") return pick([
+      "Get it there on time.",
+      "Don't let this one sit around.",
+      "The sooner it gets there, the better.",
+      "Someone's waiting on that shipment.",
+      "Time is the whole point of this one.",
+      "Get moving. The clock isn't getting any slower.",
+    ]);
+    if (type === "medevac") return pick([
+      "Keep it stable and get them in.",
+      "Get them there safely.",
+      "Smooth and steady on the arrival.",
+      "Get them where they need to be.",
+      "The priority is a safe arrival.",
+      "Take care of the approach and get them on the ground.",
+    ]);
+    if (type === "bush") return pick([
+      "Take your time with the approach.",
+      "Get the supplies in safely.",
+      "It's a remote field. Make the arrival a good one.",
+      "Someone's waiting on that delivery.",
+      "Get the supplies down and you're done.",
+      "Make the field, make the delivery, head home.",
+    ]);
+    return pick([
+      "Get it there in one piece.",
+      "Deliver the load and you're done.",
+      "Keep the cargo safe and get it to the other end.",
+      "Get the boxes where they need to go.",
+      "No heroics required. Just deliver the cargo.",
+      "Keep the shiny side up and the cargo inside.",
+      "Get it there. That's what they're paying you for.",
+    ]);
   }
 
   function briefing(type, dep, dest, pay, dist, m) {
@@ -1685,7 +2068,7 @@
   }
 
   function payout(type, dist, pay, ac) {
-    const base = { cargo: 4.4, pax: 5.8, express: 6.8, vip: 8.4, bush: 6.2, medevac: 7.8, ferry: 2.6 }[type] || 5;
+    const base = { cargo: 4.4, pax: 5.8, express: 6.8, vip: 8.4, official: 8.8, courier: 7.2, rotation: 6.2, bush: 6.2, medevac: 7.8, ferry: 2.6 }[type] || 5;
     const classMult = { piston: 1, bush: 1.1, vintage: 1.05, turboprop: 1.45, jet: 2.3, airliner: 3.5, helo: 1.65, evtol: 1.5 }[ac.cls] || 1;
     const load = pay.lbs * 0.12 + pay.pax * 110;
     return Math.round((520 + dist * base + load) * classMult / 5) * 5;
@@ -1699,8 +2082,12 @@
     if (dest.lt) bits.push("LIGHTING LISTED");
     if (dest.el && dest.el > 5000) bits.push(`ELEV ${fmtField(dest.el)}`);
     bits.push(fieldKindLabel(fieldKind(dest)));
+    if (militaryName(dest) && fieldKind(dest) !== "military") bits.push("MILITARY FIELD");
     if (ac.minRwy && dest.rw && dest.rw < ac.minRwy + 400) bits.push("MARGINAL LANDING DISTANCE");
-    if (type === "vip") bits.push("STABILIZED APPROACH");
+    if (type === "vip" || type === "official") bits.push("STABILIZED APPROACH");
+    if (type === "official") bits.push("OFFICIAL PARTY");
+    if (type === "courier") bits.push("SEALED DISPATCH");
+    if (type === "rotation") bits.push("DUTY CHANGE");
     if (type === "express") bits.push("TIME CRITICAL");
     if (type === "express" && isCareer() && hasIfr()) bits.push("INSTRUMENT REQUIRED");
     if (isCareer() && !hasIfr() && state.profile.locksOn) bits.push("NO INSTRUMENT RATING");
@@ -1733,31 +2120,41 @@
     const types = dealTypes(ac, state.type, n);
     const needPaved = state.hard || (ac.paved && state.hop !== "bush" && ac.cls !== "bush" && !isRotor(ac));
     const rotor = isRotor(ac);
+    const pads = [];
+    const keep = (a, d) => {
+      if (fieldKind(a) === "helipad") {
+        if (rotor) pads.push({ a, d });
+        return;
+      }
+      candidates.push({ a, d });
+    };
 
     const candidates = [];
     for (const a of airports) {
       if (a.id === dep.id) continue;
       if (needPaved && !a.pv) continue;
-      if (!rotor && fieldKind(a) === "helipad") continue;
-      if (!rotor && ac.minRwy && a.rw && a.rw < ac.minRwy) continue;
+      if (fieldKind(a) === "seaplane" && !isAmphib(ac)) continue;
+      if (runwayTooShort(a, ac, 1)) continue;
       if (ac.cls === "airliner" && a.t === "S") continue;
       const d = haversineNm(dep, a);
       if (d < minNm || d > maxNm) continue;
       if (d > ac.range * 0.85) continue;
-      candidates.push({ a, d });
+      keep(a, d);
     }
 
     if (types.includes("medevac")) {
       const [mLo, mHi] = medevacRange(ac);
       for (const a of airports) {
         if (a.id === dep.id) continue;
-        if (!rotor && fieldKind(a) === "helipad") continue;
         const k = fieldKind(a);
-        if (k !== "helipad" && k !== "international" && k !== "regional") continue;
+        if (k === "helipad" && !rotor) continue;
+        if (state.hard && !a.pv && k !== "helipad") continue;
+        if (k !== "helipad" && k !== "international" && k !== "regional" && !militaryName(a)) continue;
         const d = haversineNm(dep, a);
         if (d < mLo || d > mHi) continue;
         if (d > ac.range * 0.9) continue;
-        if (!candidates.some((c) => c.a.id === a.id)) candidates.push({ a, d });
+        if (k === "helipad") keep(a, d);
+        else if (!candidates.some((c) => c.a.id === a.id)) candidates.push({ a, d });
       }
     }
 
@@ -1769,15 +2166,25 @@
     }
 
     if (candidates.length < 3) {
-      // relax paved / min distance a little
       for (const a of airports) {
         if (a.id === dep.id) continue;
-        if (!rotor && fieldKind(a) === "helipad") continue;
-        if (!rotor && ac.minRwy && a.rw && a.rw < ac.minRwy * 0.85) continue;
+        if (state.hard && !a.pv && fieldKind(a) !== "helipad") continue;
+        if (fieldKind(a) === "seaplane" && !isAmphib(ac)) continue;
+        if (runwayTooShort(a, ac, 0.85)) continue;
         const d = haversineNm(dep, a);
         if (d < Math.max(12, minNm * 0.5) || d > Math.max(maxNm * 1.3, 80)) continue;
         if (d > ac.range * 0.9) continue;
-        candidates.push({ a, d });
+        keep(a, d);
+      }
+    }
+
+    if (rotor && pads.length) {
+      const want = types.includes("medevac") ? 6 : 2;
+      for (let i = 0; i < want && pads.length; i++) {
+        const j = Math.floor(Math.random() * pads.length);
+        const p = pads[j];
+        pads.splice(j, 1);
+        if (p && !candidates.some((c) => c.a.id === p.a.id)) candidates.push(p);
       }
     }
 
@@ -1801,7 +2208,7 @@
     if (allMed) {
       take(candidates.filter((c) => {
         const k = fieldKind(c.a);
-        return k === "helipad" || k === "international" || k === "regional";
+        return k === "helipad" || k === "international" || k === "regional" || militaryName(c.a);
       }), 24);
     } else {
       take(brief, n >= 5 ? 2 : n >= 3 ? 1 : 1);
@@ -1810,7 +2217,7 @@
       take(candidates, Math.max(n, types.includes("medevac") ? 24 : n));
       if (types.includes("medevac")) take(candidates.filter((c) => {
         const k = fieldKind(c.a);
-        return k === "helipad" || k === "international" || k === "regional";
+        return k === "helipad" || k === "international" || k === "regional" || militaryName(c.a);
       }), 24);
     }
     candidates.length = 0;
@@ -1822,7 +2229,13 @@
     while (out.length < n && remaining.length) {
       const type = types[out.length] || pick(types);
       const c = pickDest(remaining, type, ac);
-      if (!c) break;
+      if (!c) {
+        if ((type === "official" || type === "courier" || type === "rotation") && types.length > 1) {
+          types.splice(out.length, 1);
+          continue;
+        }
+        break;
+      }
       remaining = remaining.filter((x) => x.a.id !== c.a.id);
       if (used.has(c.a.id)) continue;
       used.add(c.a.id);
@@ -1925,7 +2338,7 @@
   function xpFor(m) {
     const distXp = m.dist * 1.35;
     const loadXp = (m.pay?.pax || 0) * 10 + Math.round((m.pay?.lbs || 0) / 30);
-    const mult = { cargo: 1, pax: 1.08, express: 1.18, vip: 1.25, bush: 1.15, medevac: 1.35, ferry: 0.7 }[m.type] || 1;
+    const mult = { cargo: 1, pax: 1.08, express: 1.18, vip: 1.25, official: 1.3, courier: 1.2, rotation: 1.12, bush: 1.15, medevac: 1.35, ferry: 0.7 }[m.type] || 1;
     let xp = Math.round((distXp + loadXp) * mult);
     return Math.max(12, xp);
   }
@@ -2155,6 +2568,47 @@
     }).join(" ");
   }
 
+  function visPlain(d) {
+    const vis = d && d.visSm;
+    if ((vis == null) && !(d && d.visM != null)) return "";
+    if (useEU()) {
+      const m = d.visM != null ? d.visM : Math.round(vis * 1609.344);
+      if (m >= 9999 || vis >= 10) return "10 km or more";
+      if (m >= 1000) {
+        const km = Math.round(m / 100) / 10;
+        return `about ${km} km`;
+      }
+      return `about ${Math.round(m).toLocaleString()} m`;
+    }
+    if (vis >= 10) return "more than 10 miles";
+    if (vis < 1) return "under 1 mile";
+    const shown = Math.round(vis * 10) / 10;
+    return shown === 1 ? "about 1 mile" : `about ${shown} miles`;
+  }
+
+  function catExplain(d) {
+    if (!d || !d.cat || d.cat === "—") return "";
+    const c = d.ceiling;
+    const vis = d.visSm;
+    const ceil = c == null ? "no ceiling" : `a ceiling of ${c.toLocaleString()} ft`;
+    const visW = visPlain(d);
+    const saw = [ceil, visW ? `visibility ${visW}` : ""].filter(Boolean).join(" and ");
+    const here = saw ? ` This report has ${saw}.` : "";
+    if (d.cat === "LIFR") {
+      return `This is LIFR, low instrument flight rules. The ceiling is under 500 ft, or visibility is under 1 mile. You should not expect to see the field until you are very close.${here}`;
+    }
+    if (d.cat === "IFR") {
+      return `This is IFR, instrument flight rules. The ceiling is under 1,000 ft, or visibility is under 3 miles. Plan to fly the arrival on instruments.${here}`;
+    }
+    if (d.cat === "MVFR") {
+      return `This is MVFR, marginal visual flight rules. The ceiling is under 3,000 ft, or visibility is 5 miles or less. You can still fly by looking outside, but the weather is tight.${here}`;
+    }
+    if (d.cat === "VFR") {
+      return `This is VFR, visual flight rules. The ceiling is at least 3,000 ft, or there is no ceiling, and visibility is more than 5 miles. You can fly by looking outside.${here}`;
+    }
+    return "";
+  }
+
   function explainWx(obs) {
     if (!obs || !obs.dec) return "";
     const d = obs.dec;
@@ -2188,41 +2642,40 @@
         ? `QNH ${q}. Set that on the altimeter.`
         : `Altimeter ${q}. Set that so field elevation reads correctly.`);
     }
-    if (d.cat === "VFR") parts.push("Category VFR.");
-    else if (d.cat === "MVFR") parts.push("Category MVFR.");
-    else if (d.cat === "IFR") parts.push("Category IFR. Plan the arrival on instruments.");
-    else if (d.cat === "LIFR") parts.push("Category LIFR. Poor weather.");
+    const cat = catExplain(d);
+    if (cat) parts.push(cat);
     return parts.join(" ");
   }
 
   function whyAircraft(ac, dest, type, dist) {
     if (!ac) return "";
+    const name = ac.name || "This aircraft";
     const k = fieldKind(dest);
     const el = (dest && dest.el) || 0;
     const rw = (dest && dest.rw) || 0;
     if (type === "medevac" && isRotor(ac) && k === "helipad") {
-      return "A helicopter can land at the hospital pad instead of using a field and transferring by ground.";
+      return `The ${name} is good for a hospital pad. It can land there instead of using a field and transferring by ground.`;
     }
     if (type === "medevac" && !isRotor(ac)) {
-      return "Fixed-wing air ambulance uses the nearest large field. The patient usually finishes the last miles on the ground.";
+      return `The ${name} is good for the nearest large field. The patient usually finishes the last miles on the ground.`;
     }
     if (k === "helipad" && isRotor(ac)) {
-      return "Rotor is required here — there is no runway, only a pad.";
+      return `The ${name} is good for this pad. There is no runway.`;
     }
     if (k === "strip" && (ac.cls === "bush" || ac.cls === "piston" || isRotor(ac))) {
-      return "This type can use a short strip that a heavier aircraft would have to skip.";
+      return `The ${name} is good for a short strip that a heavier aircraft would have to skip.`;
     }
     if (ac.cls === "jet" && (dist || 0) > 180) {
-      return "A jet covers this distance without turning the day into a fuel stop.";
+      return `The ${name} is good for this distance. It covers it without turning the day into a fuel stop.`;
     }
     if (ac.cls === "turboprop" && (k === "regional" || k === "municipal")) {
-      return "A turboprop fits mixed regional fields: faster than a piston, still usable on a shorter runway.";
+      return `The ${name} is good for mixed regional fields. Faster than a piston, and still usable on a shorter runway.`;
     }
     if (el >= 7000) {
-      return "High elevation cuts performance. Extra power and runway matter more here than they do at sea level.";
+      return `High elevation cuts performance. The ${name} will want more runway here than it does at sea level.`;
     }
     if (ac.minRwy && rw && rw < ac.minRwy + 1200 && rw >= (ac.minRwy || 0)) {
-      return "The destination runway is on the short side for this type. Plan the landing.";
+      return `The destination runway is on the short side for the ${name}. Plan the landing.`;
     }
     return "";
   }
@@ -2556,6 +3009,9 @@
     } else {
       state.dep = byId.get(state.dep.id) || state.dep;
     }
+    if (state.dep && fieldKind(state.dep) === "helipad" && !isRotor(state.ac)) {
+      state.dep = byId.get("KSKX") || airports.find((x) => x && fieldKind(x) !== "helipad") || null;
+    }
     const n = $("#field-count");
     if (n) n.textContent = "";
     try { renderDep(); } catch (e) {}
@@ -2832,7 +3288,7 @@
       row("living", "CAREER", "MAKING A LIVING", "Earn $100,000 from completed taskings.", earned, 100000),
       row("bank", "CAREER", "SIX FIGURES", "Hold $100,000 on the pilot file.", state.profile.money || 0, 100000),
       row("fleet5", "CAREER", "FLEET OWNER", "Own five aircraft in the hangar.", (state.profile.hangar || []).length, 5),
-      row("hangar10", "CAREER", "FULL HANGAR", "Fill the hangar (10/10).", (state.profile.hangar || []).length, 10),
+      row("hangar10", "CAREER", "FULL HANGAR", "Own 10 aircraft.", (state.profile.hangar || []).length, 10),
       row("debtfree", "CAREER", "DEBT FREE", "Repay a loan down to zero.", st.repaid || 0, 1),
       row("cash", "CAREER", "NO BANK NEEDED", "Buy an aircraft with cash on the file.", st.cashBuys || 0, 1),
       row("dealer", "CAREER", "USED AIRCRAFT DEALER", "Sell an aircraft from the hangar.", st.sold || 0, 1),
@@ -3063,6 +3519,645 @@
     }).catch(() => {});
   }
 
+  function reviewVoice(m) {
+    const t = m && m.type;
+    if (t === "cargo" || t === "express" || t === "courier") return "cargo";
+    if (t === "medevac") return "med";
+    if (t === "official" || t === "rotation") return "official";
+    if (t === "bush") return m.payload && m.payload.kind === "pax" ? "pax" : "cargo";
+    if (t === "pax" || t === "vip") return "pax";
+    return "";
+  }
+
+  function starGlyph(n) {
+    const s = Math.max(1, Math.min(5, Math.round(Number(n) || 0)));
+    return "★★★★★".slice(0, s) + "☆☆☆☆☆".slice(0, 5 - s);
+  }
+
+  function nearLandmark(ap) {
+    if (!ap || !Number.isFinite(ap.lat) || !Number.isFinite(ap.lon)) return "";
+    let best = "";
+    let bestD = 18;
+    LANDMARKS.forEach((lm) => {
+      if (!Number.isFinite(lm.lat) || !Number.isFinite(lm.lon)) return;
+      const d = haversineNm(ap, lm);
+      if (d < bestD) {
+        bestD = d;
+        best = lm.n || "";
+      }
+    });
+    return best;
+  }
+
+  function customerReview(m, info) {
+    if (!state.profile || state.profile.reviewsOn === false) return null;
+    if (!m || info.crashed) return null;
+    const voice = reviewVoice(m);
+    if (!voice) return null;
+    const dest = asField(m.dest);
+    const place = (dest && (dest.c || dest.n || dest.id)) || "the field";
+    const pilot = (state.profile.name || "").trim() || "the pilot";
+    const showCo = state.profile.showAirline !== false;
+    const company = showCo ? (state.profile.airline || "").trim() : "";
+    let mode = "pilot";
+    if (company) mode = ["pilot", "company", "both", "none"][Math.floor(Math.random() * 4)];
+    else if (Math.random() < 0.45) mode = "none";
+    const w = wxBits(m.dest);
+    const wx = String(w.wx || "").toUpperCase();
+    const cat = w.cat || "";
+    const windy = (w.gustKt || 0) >= 22 || (w.windKt || 0) >= 18;
+    const storm = /TS/.test(wx);
+    const snow = /\b(SN|SG|PL)\b/.test(wx);
+    const rain = /\b(RA|DZ|SH)\b/.test(wx);
+    const fog = /\b(FG|BR)\b/.test(wx);
+    const imc = cat === "MVFR" || cat === "IFR" || cat === "LIFR";
+    const land = info.score && info.score.landing && info.score.landing.word;
+    const late = !!info.penalty;
+    const early = !!info.bonus;
+    const timed = !!(m.arrTime && (late || early || isTimed(m)));
+    let diverted = false;
+    if (info.simLand && simSnap && simSnap.hasPos) {
+      const hit = landingPlace(Number(simSnap.landLat), Number(simSnap.landLon), m.dest);
+      diverted = !!(hit && !hit.match);
+    }
+    const scenic = nearLandmark(dest);
+    const unrated = !info.score;
+    let stars = 5;
+    if (!unrated && land === "FIRM") stars = 4;
+    else if (!unrated && land === "HARD") stars = 3;
+    else if (!unrated && land === "ROUGH") stars = 2;
+    else if (!unrated && land === "CRITICAL") stars = 1;
+    else if (!unrated && !land) stars = 4;
+    if (late) stars -= 1;
+    if (diverted) stars = Math.min(stars, 3);
+    if (info.score && info.score.goAround) stars = Math.min(stars, 4);
+    stars = Math.max(1, Math.min(5, stars));
+    const rough = land === "HARD" || land === "ROUGH" || land === "CRITICAL";
+    const firm = land === "FIRM";
+    const gentle = land === "BUTTER" || land === "SMOOTH";
+    const say = (lines) => {
+      const ok = lines.filter((line) => {
+        if (mode === "none" && (line.includes("{pilot}") || line.includes("{company}"))) return false;
+        if (line.includes("{company}") && (mode !== "company" && mode !== "both")) return false;
+        if (line.includes("{landmark}") && !scenic) return false;
+        return true;
+      });
+      if (!ok.length) return "";
+      const line = pick(ok);
+      let who = pilot;
+      if (mode === "company") who = company;
+      else if (mode === "both") who = `${pilot} of ${company}`;
+      return line
+        .replaceAll("{pilot}", who)
+        .replaceAll("{company}", company)
+        .replaceAll("{place}", place)
+        .replaceAll("{landmark}", scenic || place);
+    };
+    const paxGood = [
+      "Really enjoyed the flight into {place}. {pilot} did a great job.",
+      "Good flight with {pilot}. Nice and easy all the way into {place}.",
+      "I had a good trip with {pilot}. We got into {place} without any trouble.",
+      "That was a nice flight into {place}.",
+      "I enjoyed the trip. {place} was a great place to arrive.",
+      "Smooth flight and a good arrival into {place}.",
+      "No complaints from me. Good flight into {place}.",
+      "{pilot} gave us a really nice flight into {place}.",
+      "Everything went pretty smoothly. I enjoyed the trip.",
+      "A good trip overall. I'd happily do that flight again.",
+      "Nice flight. The arrival into {place} was especially good.",
+      "Nothing to complain about. We got there safely and had a good flight.",
+      "A comfortable trip into {place}. I'd fly with {pilot} again.",
+      "Good flight, good arrival, good trip. Can't ask for much more.",
+      "I enjoyed this one. {pilot} handled the flight well.",
+    ];
+    const paxRough = [
+      "The flight was good until we got close to {place}. The landing was a bit rough.",
+      "Everything was fine until the arrival. That one got my attention.",
+      "Good flight overall, although the landing into {place} was pretty rough.",
+      "The trip was enjoyable. The arrival was definitely the rough part.",
+      "We made it into {place}, but I felt that landing.",
+      "A good flight with a rough ending.",
+      "The flight itself was fine. The landing could have been smoother.",
+      "Not a bad trip, although the arrival into {place} was a little hard.",
+      "Everything went well until the wheels touched down.",
+      "I'd call it a good flight. The landing was just a bit memorable.",
+      "The arrival was rough, but otherwise I had no real complaints.",
+      "A little rough getting into {place}, but we got there safely.",
+    ];
+    const officialLines = [
+      "{pilot} handled the flight professionally. We reached {place} without any issues.",
+      "The trip to {place} was handled properly from start to finish.",
+      "Everything went as expected. {place} was reached safely.",
+      "A straightforward flight into {place}. No issues worth reporting.",
+      "{pilot} got the job done. We arrived at {place} safely.",
+      "The flight was handled well and completed as tasked.",
+      "No problems with the flight. We reached {place} safely.",
+      "A solid flight into {place}. Everything went according to plan.",
+      "The task was completed successfully. Good work by {pilot}.",
+      "Nothing complicated about it. We got the job done and reached {place}.",
+    ];
+    const medGood = [
+      "The patient reached {place} safely. That's what mattered.",
+      "{pilot} got the patient into {place} safely.",
+      "The patient is down at {place}. Mission completed.",
+      "We made it to {place} safely with the patient.",
+      "The patient arrived safely at {place}. Thank you, {pilot}.",
+      "{pilot} got us into {place} when we needed to get there.",
+      "The patient was delivered safely. Good work getting into {place}.",
+      "We reached {place} safely. That's all we could ask for.",
+    ];
+    const medRough = [
+      "The arrival was firm, but the patient made it to {place} safely.",
+      "It wasn't the smoothest arrival, but we got the patient where they needed to be.",
+      "The landing was a little rough, but the patient reached {place} safely.",
+    ];
+    const cargoGood = [
+      "The shipment arrived at {place} in good order.",
+      "Load delivered to {place}. No complaints.",
+      "The shipment reached {place} exactly as expected.",
+      "Freight is on the ground at {place}. Job done.",
+      "The load made it to {place} safely.",
+      "Everything arrived in good shape.",
+      "The shipment got where it needed to go. That's what counts.",
+    ];
+    const cargoTime = ["The freight made it to {place} safely and on time."];
+    const cargoRough = [
+      "The freight made {place}. The arrival was a little rough, though.",
+      "The load reached {place}, although the landing wasn't exactly gentle.",
+      "{place} got the shipment. The landing was definitely the weak point.",
+      "The freight made it in safely, even if the arrival was a little rough.",
+      "Not the smoothest delivery into {place}, but the freight got there.",
+      "The shipment arrived safely. Could have done without that landing, though.",
+    ];
+    const cargoStrip = ["The strip at {place} gave the aircraft a workout, but the load arrived."];
+    const wrongLines = [
+      "We didn't actually make it to {place}.",
+      "We ended up somewhere other than {place}.",
+      "That wasn't {place}.",
+      "We never reached {place}.",
+      "The flight didn't finish at {place} as planned.",
+    ];
+    const lateLines = [
+      "We were a little late getting into {place}.",
+      "We made it to {place}, but not quite on time.",
+      "We arrived at {place} later than expected.",
+      "The flight ran late, but we eventually made it.",
+      "We missed the original arrival time into {place}.",
+    ];
+    const earlyLines = [
+      "We actually got into {place} a little early.",
+      "We made it into {place} ahead of schedule.",
+      "The freight arrived early.",
+      "The load was on the ground ahead of schedule.",
+    ];
+    const onTimeLines = [
+      "We arrived right on time.",
+      "We made the scheduled window into {place}.",
+      "Everything was on time for this trip.",
+      "We got into {place} exactly when expected.",
+    ];
+    const gentleLines = [
+      "That was a really nice landing.",
+      "Very smooth landing.",
+      "Couldn't complain about that arrival.",
+      "That was about as smooth as you could ask for.",
+      "Nice, gentle touchdown.",
+      "The landing was smooth enough to barely notice.",
+    ];
+    const firmLines = [
+      "The landing was a little firm.",
+      "That touchdown had some weight behind it.",
+      "Definitely felt the landing.",
+      "A bit of a firm arrival, but nothing serious.",
+      "The touchdown wasn't exactly soft.",
+    ];
+    const hardLines = [
+      "That was a rough landing.",
+      "The landing was definitely the rough part.",
+      "We felt that touchdown.",
+      "That was one of the harder landings I've experienced.",
+      "The arrival was pretty rough.",
+      "I wouldn't call that a gentle landing.",
+      "The landing could have gone a lot better.",
+    ];
+    const bounceLines = [
+      "We bounced a little on landing.",
+      "There was a bit of a bounce on touchdown.",
+      "That landing had a little extra bounce to it.",
+      "We definitely bounced when we touched down.",
+      "The first touchdown wasn't exactly the final one.",
+    ];
+    const aroundLines = [
+      "We went around once before getting in.",
+      "There was a go-around, but we made it in on the next attempt.",
+      "We had to try the approach twice.",
+      "The first approach didn't work out, but we landed safely afterward.",
+      "There was a go-around on the way in.",
+      "We took another shot at the landing and got in the second time.",
+    ];
+    const stormLines = [
+      "There were storms around {place} on the way in.",
+      "The weather around {place} made the arrival interesting.",
+      "We had some stormy weather coming into {place}.",
+      "The storms made for a pretty interesting approach.",
+      "Not exactly perfect weather around {place}, but we made it in.",
+    ];
+    const snowLines = [
+      "Snow made the arrival into {place} a little more interesting.",
+      "There was quite a bit of snow around {place}.",
+      "The snow definitely added something to that arrival.",
+      "Not the easiest conditions with all that snow around {place}.",
+      "Snow on the way into {place}, but we made it in safely.",
+    ];
+    const rainLines = [
+      "We had rain on the way into {place}.",
+      "It was raining when we got into {place}.",
+      "A wet arrival into {place}, but nothing too bad.",
+      "The rain made for a pretty gloomy approach.",
+      "We came into {place} with rain all around us.",
+    ];
+    const fogLines = [
+      "{place} was pretty hard to see until we got close.",
+      "Visibility wasn't great on the way in.",
+      "The field was hard to pick out until the last part of the approach.",
+      "It wasn't exactly easy to see the runway coming into {place}.",
+      "The weather had the field pretty well hidden.",
+    ];
+    const clearLines = [
+      "The weather couldn't have been much better.",
+      "Beautiful weather all the way into {place}.",
+      "Clear skies made for a great arrival.",
+      "Couldn't ask for better conditions.",
+      "It was a beautiful day for the flight.",
+    ];
+    const windLines = [
+      "It was pretty windy coming into {place}.",
+      "The wind made the arrival interesting.",
+      "There was quite a bit of wind around {place}.",
+      "Definitely a windy approach.",
+      "The wind was no joke on the way in.",
+    ];
+    const viewLines = [
+      "The views approaching {place} were worth the trip.",
+      "That was a beautiful way to arrive at {place}.",
+      "I really enjoyed seeing {place} from the air.",
+      "The view of {landmark} was probably my favorite part.",
+      "Seeing {landmark} on the way in was pretty cool.",
+      "The approach gave us a great view of {landmark}.",
+      "I didn't mind the view on the way into {place}.",
+      "{place} looked great from the air.",
+      "That was a pretty memorable approach into {place}.",
+      "The scenery around {place} was fantastic.",
+    ];
+    const closeGood = [
+      "I'd happily do this trip again.",
+      "I'd fly with {pilot} again.",
+      "I'd book this flight again.",
+      "I'd have no problem flying with {pilot} again.",
+      "I'd definitely use {company} again.",
+      "I'd do this trip again.",
+      "No real complaints from me.",
+      "Can't complain about that.",
+      "I'd call that a good trip.",
+      "Happy with the flight overall.",
+      "I'd be happy to take this flight again.",
+      "Nothing I'd really change about the trip.",
+    ];
+    const closeMid = [
+      "Overall, it was a decent trip.",
+      "Not perfect, but not bad either.",
+      "A little rough around the edges, but we got there.",
+      "Could have been smoother, but it got the job done.",
+      "Not my smoothest flight, but it worked out.",
+      "I'll take it.",
+      "All things considered, it was fine.",
+    ];
+    const closeBad = [
+      "I might think twice before booking this one again.",
+      "I wouldn't be rushing to do this trip again.",
+      "Hopefully the next flight goes a little better.",
+      "Not the kind of arrival I'd want every time.",
+      "I'd probably give it another try, but I'd hope for a smoother flight.",
+      "The trip could have gone better.",
+      "I'm not sure I'd book this one again.",
+    ];
+    const offPax = [
+      "Really enjoyed the flight into {place}. {pilot} did a great job.",
+      "Had a really nice flight with {pilot}. {place} was a great way to end it.",
+      "Good trip with {pilot}. Everything went smoothly into {place}.",
+      "That was a nice flight into {place}. I enjoyed it.",
+      "I really enjoyed the trip to {place}.",
+      "No complaints here. It was a good flight into {place}.",
+      "{pilot} did a great job getting us into {place}.",
+      "That was a good trip. I'd happily do it again.",
+      "Everything went smoothly and we got there safely. Can't ask for much more.",
+      "Really nice flight into {place}. I'd happily fly with {pilot} again.",
+      "I enjoyed this one. {pilot} handled the flight really well.",
+      "Good flight, good arrival. I have no complaints.",
+      "That was an easy, enjoyable trip into {place}.",
+      "I had a good time on this flight. {place} looked great from the air.",
+      "A really pleasant trip. I'd have no problem flying with {pilot} again.",
+      "Everything went well on the way into {place}. I enjoyed the flight.",
+      "Nothing much to complain about. Good flight all around.",
+      "Nice trip into {place}. I'd definitely take this flight again.",
+    ];
+    const offOfficial = [
+      "{pilot} handled the flight well. We reached {place} without any problems.",
+      "Everything went smoothly on the way to {place}.",
+      "The trip to {place} went just as expected.",
+      "A straightforward flight into {place}. No issues to report.",
+      "{pilot} got the job done and got us safely into {place}.",
+      "Everything was handled properly and the flight was completed successfully.",
+      "No problems with the flight. We made it to {place} safely.",
+      "Solid flight into {place}. Everything went according to plan.",
+      "The job was completed without any issues. Good work by {pilot}.",
+      "Nothing complicated about this one. We got the job done.",
+      "Everything went well. {place} was reached safely.",
+      "A good, straightforward flight. No complaints from me.",
+      "{pilot} handled things well and got us where we needed to be.",
+      "The flight went smoothly from our end. Good work.",
+      "No issues worth mentioning. The task was completed successfully.",
+    ];
+    const offMed = [
+      "The patient reached {place} safely. That's what matters.",
+      "{pilot} got the patient safely into {place}.",
+      "The patient is at {place} safely. Mission accomplished.",
+      "We made it to {place} with the patient safely.",
+      "The patient arrived safely at {place}. Thank you, {pilot}.",
+      "{pilot} got us into {place} when we needed to be there.",
+      "The patient was delivered safely. That's the important part.",
+      "We reached {place} safely. Couldn't ask for more than that.",
+      "The patient made it to {place} safely. Good work.",
+      "We got the patient where they needed to be.",
+      "The patient arrived safely. The flight did what it needed to do.",
+      "{pilot} got the job done and got the patient safely to {place}.",
+      "Safe arrival at {place}. That's all that mattered on this one.",
+      "The patient is safely at {place}. Good flight.",
+    ];
+    const offCargo = [
+      "The shipment made it to {place} in good shape.",
+      "Load delivered to {place}. No problems.",
+      "The shipment reached {place} just fine.",
+      "The freight is on the ground at {place}. Job done.",
+      "The load made it to {place} safely.",
+      "Everything arrived in good shape.",
+      "The shipment got where it needed to go. That's what counts.",
+      "The freight made it to {place} safely.",
+      "Load's on the ground and everything looks good.",
+      "The shipment arrived without any trouble.",
+      "Everything made it to {place} in one piece.",
+      "The freight got there safely. Can't complain about that.",
+      "The load was delivered to {place} without any issues.",
+      "Shipment delivered. Everything looks good from here.",
+    ];
+    const offCargoTime = [
+      "The freight made it to {place} right on schedule.",
+      "The load arrived at {place} on time.",
+      "The shipment was on the ground right when it needed to be.",
+      "The freight made its delivery window with time to spare.",
+      "Right on schedule. The load is at {place}.",
+      "The shipment arrived when it was supposed to.",
+    ];
+    const offLate = [
+      "We were a little late getting into {place}.",
+      "We made it to {place}, just a little later than planned.",
+      "We arrived at {place} later than expected.",
+      "The flight ran a bit late, but we made it.",
+      "We got there eventually, although we were running late.",
+      "A little behind schedule getting into {place}.",
+      "We didn't quite make the original arrival time.",
+      "We were running late by the time we got into {place}.",
+      "Not exactly on time, but we made it to {place}.",
+    ];
+    const offEarly = [
+      "We actually made it into {place} a little early.",
+      "We got into {place} ahead of schedule.",
+      "We beat the schedule by a little.",
+      "We made it in earlier than expected.",
+      "We got there with some time to spare.",
+      "Made it to {place} early. Can't complain about that.",
+    ];
+    const offEarlyCargo = [
+      "The freight arrived a little early.",
+      "The load was on the ground ahead of schedule.",
+      "The shipment was delivered ahead of schedule.",
+      "We got there with some time to spare.",
+    ];
+    const offOnTime = [
+      "We arrived right on time.",
+      "We made it into {place} right when we were supposed to.",
+      "Everything was right on schedule.",
+      "We got into {place} exactly when expected.",
+      "Made the arrival window without a problem.",
+      "Right on time into {place}.",
+      "We made it there when we needed to.",
+      "Couldn't have timed the arrival much better.",
+      "Everything stayed right on schedule.",
+    ];
+    const offStorm = [
+      "There were some pretty nasty storms around {place}.",
+      "We had some stormy weather coming into {place}.",
+      "The storms made the arrival a little interesting.",
+      "There was some rough weather around {place}, but we made it in.",
+      "Definitely some weather to deal with around {place}.",
+      "The storms were pretty hard to miss on the way in.",
+      "Not the nicest weather coming into {place}.",
+      "We ran into some storms near {place}.",
+      "The weather around {place} wasn't exactly cooperating.",
+    ];
+    const offSnow = [
+      "There was quite a bit of snow around {place}.",
+      "The snow made the arrival into {place} interesting.",
+      "Not the easiest conditions with all that snow around {place}.",
+      "We had snow on the way into {place}, but made it in safely.",
+      "Snow all around {place}. Definitely a different kind of arrival.",
+      "There was plenty of snow waiting for us at {place}.",
+      "The weather around {place} was pretty wintry.",
+      "Snow made things a little more interesting on the way in.",
+    ];
+    const offRain = [
+      "We had rain on the way into {place}.",
+      "It was raining when we got into {place}.",
+      "The rain made for a pretty gloomy arrival.",
+      "We came into {place} with rain all around us.",
+      "Quite a bit of rain around {place} on the way in.",
+      "A wet arrival into {place}, but we made it.",
+      "The rain followed us right into {place}.",
+      "Definitely a rainy way to arrive at {place}.",
+    ];
+    const offFog = [
+      "{place} was pretty hard to see until we got close.",
+      "Visibility wasn't great on the way in.",
+      "It took a while before we could really see the field.",
+      "The field was hard to pick out until we got close.",
+      "The runway wasn't exactly easy to find coming into {place}.",
+      "It was pretty hard to see {place} through the weather.",
+      "The weather had the field almost completely hidden.",
+      "We didn't get a good look at {place} until fairly late.",
+      "Visibility made the approach into {place} a little tricky.",
+    ];
+    const offClear = [
+      "The weather couldn't have been much better.",
+      "Beautiful weather all the way into {place}.",
+      "Couldn't ask for better conditions.",
+      "It was a beautiful day for the flight.",
+      "Clear skies made for a really nice flight.",
+      "Perfect weather for a trip into {place}.",
+      "The weather was beautiful from start to finish.",
+      "Couldn't have picked a better day to fly.",
+      "Clear skies and a great view all the way in.",
+    ];
+    const offWind = [
+      "It was pretty windy coming into {place}.",
+      "There was quite a bit of wind around {place}.",
+      "Definitely a windy approach.",
+      "The wind was no joke on the way in.",
+      "We had some strong wind coming into {place}.",
+      "The wind made the arrival a little more interesting.",
+      "Quite a bit of wind around {place} today.",
+      "It was a pretty windy arrival.",
+      "The wind definitely made itself known on the way in.",
+    ];
+    const offView = [
+      "The views coming into {place} were worth the trip.",
+      "That was a beautiful way to arrive at {place}.",
+      "I really enjoyed seeing {place} from the air.",
+      "The view of {landmark} was probably my favorite part.",
+      "Seeing {landmark} on the way in was pretty cool.",
+      "We got a great view of {landmark} from the air.",
+      "The approach gave us a really nice view of {landmark}.",
+      "{place} looked pretty amazing from the air.",
+      "That was a memorable way to arrive at {place}.",
+      "The scenery around {place} was fantastic.",
+      "I wasn't expecting such a good view of {landmark}.",
+      "The view on the way into {place} was one of the best parts.",
+      "Definitely enjoyed the scenery around {place}.",
+      "That approach was worth it for the view alone.",
+    ];
+    const offCloseGood = [
+      "I'd happily do this trip again.",
+      "I'd fly with {pilot} again.",
+      "I'd book this flight again.",
+      "I'd have no problem flying with {pilot} again.",
+      "I'd definitely use {company} again.",
+      "I'd do this trip again.",
+      "No real complaints from me.",
+      "Can't complain about that.",
+      "I'd call that a good trip.",
+      "Happy with the flight overall.",
+      "I'd be happy to take this flight again.",
+      "Nothing I'd really change about the trip.",
+      "I'd be glad to fly this route again.",
+      "I'd have no problem doing this one again.",
+      "I'd happily book with {company} again.",
+      "Overall, a really good trip.",
+      "That's a flight I'd take again.",
+    ];
+    const offCloseMid = [
+      "Overall, it was a decent trip.",
+      "Not perfect, but not bad either.",
+      "I'll take it.",
+      "All things considered, it was fine.",
+      "Could have been better, but it got the job done.",
+      "Not the smoothest trip, but nothing terrible.",
+      "A little rough around the edges, but we made it.",
+      "It wasn't perfect, but I can't complain too much.",
+      "Could have gone a little better.",
+      "Not my favorite flight, but it worked out.",
+      "I'll give it a pass.",
+      "It was fine once we got there.",
+      "Not exactly memorable, but it got us there.",
+    ];
+    let opening = "";
+    const notes = [];
+    if (unrated) {
+      if (voice === "cargo") opening = say(offCargo);
+      else if (voice === "med") opening = say(offMed);
+      else if (voice === "official") opening = say(offOfficial);
+      else opening = say(offPax);
+      if (late) notes.push(say(offLate));
+      else if (early && timed) notes.push(say(voice === "cargo" ? offEarlyCargo : offEarly));
+      else if (timed) notes.push(say(voice === "cargo" ? offCargoTime : offOnTime));
+      if (storm) notes.push(say(offStorm));
+      else if (snow) notes.push(say(offSnow));
+      else if (rain) notes.push(say(offRain));
+      else if (fog || imc) notes.push(say(offFog));
+      else if (cat === "VFR") notes.push(say(offClear));
+      if (windy) notes.push(say(offWind));
+      if (scenic && Math.random() < 0.35) notes.push(say(offView));
+    } else if (diverted) opening = say(wrongLines);
+    else if (voice === "cargo") {
+      if (rough) opening = say(m.type === "bush" ? cargoRough.concat(cargoStrip) : cargoRough);
+      else opening = say((!late && timed) ? cargoGood.concat(cargoTime) : cargoGood);
+    } else if (voice === "med") opening = say(rough || firm ? medRough : medGood);
+    else if (voice === "official") opening = say(officialLines);
+    else opening = say(rough ? paxRough : paxGood);
+    if (!unrated) {
+      if (!diverted && late) notes.push(say(lateLines));
+      else if (!diverted && early && timed) notes.push(say(voice === "cargo" ? earlyLines.slice(2) : earlyLines.slice(0, 2)));
+      else if (!diverted && timed) notes.push(say(onTimeLines));
+      const landingTold = (rough && (voice === "pax" || voice === "cargo")) || (voice === "med" && (rough || firm));
+      if (!landingTold && !diverted && gentle && stars >= 4) notes.push(say(gentleLines));
+      else if (!landingTold && !diverted && firm) notes.push(say(firmLines));
+      else if (!landingTold && !diverted && rough) notes.push(say(hardLines));
+      if (simSnap && simSnap.bounce) notes.push(say(bounceLines));
+      if (info.score && info.score.goAround) notes.push(say(aroundLines));
+      if (storm) notes.push(say(stormLines));
+      else if (snow) notes.push(say(snowLines));
+      else if (rain) notes.push(say(rainLines));
+      else if (fog) notes.push(say(fogLines));
+      else if (imc) notes.push(say(fogLines));
+      else if (cat === "VFR" && stars >= 4 && !rough) notes.push(say(clearLines));
+      if (windy) notes.push(say(windLines));
+      if (scenic && stars >= 4 && !rough && !diverted && Math.random() < 0.35) notes.push(say(viewLines));
+    }
+    const picked = shuffle(notes.filter(Boolean)).slice(0, 2);
+    const closerPool = unrated
+      ? (stars >= 5 ? offCloseGood : offCloseGood.concat(offCloseMid))
+      : (stars >= 5 ? closeGood : stars === 4 ? closeGood.concat(closeMid) : stars === 3 ? closeMid : closeBad);
+    const closer = say(closerPool);
+    const used = [];
+    const bits = [];
+    const norm = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+    const overlaps = (a, b) => {
+      if (!a || !b) return false;
+      if (a === b) return true;
+      const [short, long] = a.length < b.length ? [a, b] : [b, a];
+      if (short.length >= 24 && long.includes(short)) return true;
+      const ha = a.split(" ").slice(0, 6).join(" ");
+      const hb = b.split(" ").slice(0, 6).join(" ");
+      if (ha.length > 18 && ha === hb) return true;
+      if (/\bagain\b/.test(a) && /\bagain\b/.test(b)) return true;
+      if (/complain/.test(a) && /complain/.test(b)) return true;
+      return false;
+    };
+    const add = (line) => {
+      String(line || "").split(/(?<=[.!?])\s+/).forEach((part) => {
+        const text = part.trim();
+        const key = norm(text);
+        if (!key) return;
+        if (used.some((u) => overlaps(u, key))) return;
+        used.push(key);
+        bits.push(text);
+      });
+    };
+    add(opening);
+    picked.forEach(add);
+    add(closer);
+    return { stars, text: bits.join(" "), place };
+  }
+
+  function fileReview(review) {
+    if (!review) return;
+    const p = state.profile;
+    p.repSum = (Number(p.repSum) || 0) + review.stars;
+    p.repN = (Number(p.repN) || 0) + 1;
+    const list = Array.isArray(p.reviews) ? p.reviews.slice() : [];
+    list.unshift({ stars: review.stars, text: review.text, at: new Date().toISOString() });
+    p.reviews = list.slice(0, 5);
+    saveProfile();
+  }
+
   function completeMission() {
     if (!state.active) return;
     const m = state.active;
@@ -3151,6 +4246,14 @@
     const certs = grantLicenseAwards(beforeN, Math.max(afterN, afterPayN), crashed);
     splashQueue = [];
     if (!crashed && certs.length) certs.forEach((L) => splashQueue.push({ kind: "cert", lic: L }));
+    const review = customerReview(m, {
+      crashed,
+      penalty,
+      bonus,
+      score,
+      simLand: !!(simSnap && simSnap.landed),
+    });
+    if (review) fileReview(review);
     showDebrief({
       m,
       bonus,
@@ -3164,12 +4267,15 @@
       overbank: !!(simSnap && simSnap.overbank),
       simLand: !!(simSnap && simSnap.landed),
       score,
+      review,
     });
     writeSortieReport(m, { crashed, score });
   }
 
   let simSnap = { connected: false };
   let simLatch = { crashed: false, crashWhy: "", overbank: false, landAt: "", hasFpm: false, touchFpm: 0, touchIas: 0, touchG: 0, bounce: false, goAround: false, maxG: 0, maxIas: 0, minVs: 0, peakG: 0, maxBank: 0, hasPos: false, landLat: 0, landLon: 0 };
+  let simEpoch = -1;
+  let simEpochFloor = -1;
 
   function noteSimLatch() {
     if (simSnap.crashed) simLatch.crashed = true;
@@ -3212,6 +4318,10 @@
         return;
       }
       const next = await r.json();
+      if (typeof next.epoch === "number") {
+        if (next.epoch <= simEpochFloor) return;
+        simEpoch = next.epoch;
+      }
       if (simLatch.crashed) next.crashed = true;
       if (!next.crashWhy && simLatch.crashWhy) next.crashWhy = simLatch.crashWhy;
       if (simLatch.overbank) next.overbank = true;
@@ -3242,6 +4352,7 @@
   }
 
   function simResetWatch() {
+    if (simEpoch >= 0) simEpochFloor = simEpoch;
     simLatch = { crashed: false, crashWhy: "", overbank: false, landAt: "", hasFpm: false, touchFpm: 0, touchIas: 0, touchG: 0, bounce: false, goAround: false, maxG: 0, maxIas: 0, minVs: 0, peakG: 0, maxBank: 0, hasPos: false, landLat: 0, landLon: 0 };
     simSnap = { connected: !!simSnap.connected, atcId: simSnap.atcId || "" };
     fetch("/__twofly/sim", { method: "POST", cache: "no-store" }).catch(function () {});
@@ -3258,6 +4369,7 @@
 
   function simStatusLine() {
     if (!simSnap.connected) return `<p class="muted">SIM OFFLINE</p>`;
+    if (simSnap.err) return `<p class="muted">SIM ONLINE · FLIGHT NOT STARTED</p>`;
     return `<p class="muted">SIM LIVE · ${simSnap.airborne ? "AIRBORNE" : "ON GROUND"}</p>`;
   }
 
@@ -3270,11 +4382,15 @@
       el.textContent = "SIM OFFLINE";
       return;
     }
+    if (simSnap.err) {
+      el.innerHTML = `<span class="sim-live"><i></i> SIM ONLINE · FLIGHT NOT STARTED</span>`;
+      return;
+    }
     el.innerHTML = `<span class="sim-live"><i></i> SIM LIVE · ${simSnap.airborne ? "AIRBORNE" : "ON GROUND"}</span>`;
   }
 
   function isTimed(m) {
-    return m && (m.type === "express" || m.type === "vip" || m.type === "medevac");
+    return m && (m.type === "express" || m.type === "vip" || m.type === "official" || m.type === "courier" || m.type === "medevac");
   }
 
   function latePenalty(m, now) {
@@ -3392,7 +4508,15 @@
     }
     let mission = 15;
     if (!flags.simLand) {
-      notes.push("Complete was pressed before the sim logged a landing.");
+      const err = simSnap && simSnap.err;
+      const stuck = !!(simSnap && simSnap.connected && !(simSnap.maxIas > 30) && !simSnap.airborne);
+      if (err) {
+        notes.push("The sim was online, but the flight had not started, so no landing was logged.");
+      } else if (stuck) {
+        notes.push("The sim stayed connected, but speed and height never moved, so the landing was not logged. That is a Sim Watch miss, not an early Complete.");
+      } else {
+        notes.push("Complete was pressed before the sim logged a landing.");
+      }
     } else if (flags.hasPos || (simSnap && simSnap.hasPos)) {
       const lat = Number(flags.landLat != null ? flags.landLat : simSnap.landLat);
       const lon = Number(flags.landLon != null ? flags.landLon : simSnap.landLon);
@@ -3424,7 +4548,7 @@
         notes.push("Bounce after touchdown.");
       }
       const speed = Number(flags.touchIas || (simSnap && simSnap.touchIas) || 0);
-      notes.push(`Touchdown ${down} ft/min${speed ? ", " + Math.round(speed) + " knots" : ""}. ${landing.word.charAt(0) + landing.word.slice(1).toLowerCase()} for this class.`);
+      notes.push(`Touchdown ${down} ft/min${speed ? ", " + Math.round(speed) + " knots" : ""}. ${landing.word.charAt(0) + landing.word.slice(1).toLowerCase()} for the ${ac.name || "aircraft"}.`);
     } else if (flags.simLand) {
       notes.push("Landing rate was not recorded.");
     }
@@ -3588,6 +4712,11 @@
     body.innerHTML = `
       <h2>${esc(icaoOf(m.dep))} → ${esc(icaoOf(m.dest))}</h2>
       <p class="muted">${esc(fieldCaption(m.dep))} → ${esc(fieldCaption(m.dest))}${timing ? " · " + timing : ""}</p>
+      ${info.review ? `<div class="review-card">
+        <p class="pedia-kicker">CUSTOMER REVIEW</p>
+        <p class="review-stars">${starGlyph(info.review.stars)} <span>${Number(info.review.stars).toFixed(1)}</span></p>
+        <p class="review-line">${esc(info.review.text)}</p>
+      </div>` : (info.crashed && state.profile && state.profile.reviewsOn !== false && reviewVoice(m) ? `<p class="muted">No customer review. The flight did not finish.</p>` : "")}
       ${score ? `<div class="score-card score-${score.tone || "good"}">
         <div class="score-letter">${esc(score.letter || score.grade || "")}</div>
         <div>
@@ -4123,16 +5252,17 @@
     const typeEl = $("#type");
     if (!typeEl) return;
     const cap = careerTypeSet();
-    const opts = TYPES.filter((t) => !cap || cap.has(t.id));
+    const plane = new Set(planeTypes(state.ac));
+    const opts = TYPES.filter((t) => plane.has(t.id) && (!cap || cap.has(t.id)));
     const cur = state.type || "any";
     typeEl.innerHTML =
       `<option value="any">ANY AUTHORIZED CATEGORY</option>` +
       opts.map((t) => `<option value="${t.id}">${t.label}</option>`).join("");
-    if (cur !== "any" && cap && !cap.has(cur)) {
+    if (cur !== "any" && !opts.some((t) => t.id === cur)) {
       state.type = "any";
       typeEl.value = "any";
     } else {
-      typeEl.value = opts.some((t) => t.id === cur) || cur === "any" ? cur : "any";
+      typeEl.value = cur;
     }
   }
 
@@ -4231,7 +5361,7 @@
       }
     }
     const fleetLab = $("#fleet-label");
-    if (fleetLab) fleetLab.textContent = `FLEET ${p.hangar.length}/${HANGAR_CAP}`;
+    if (fleetLab) fleetLab.textContent = `FLEET ${p.hangar.length}/${hangarCap()}`;
     if (fleet) {
       const rows = p.hangar.map((id) => AIRCRAFT.find((a) => a.id === id)).filter(Boolean);
       fleet.innerHTML = rows.map((a) => {
@@ -4282,7 +5412,7 @@
         const locked = p.locksOn && !classUnlocked(a.cls);
         const free = !p.moneyOn;
         const afford = free || p.money >= price;
-        const full = p.hangar.length >= HANGAR_CAP;
+        const full = p.hangar.length >= hangarCap();
         const priceHtml = free
           ? `<span class="price-ok">FREE</span>`
           : `<span class="${afford ? "price-ok" : "price-no"}">${moneyFmt(price)}</span>`;
@@ -4311,6 +5441,7 @@
     const n = clampHud(state.profile && state.profile.hudScale);
     const z = String(n / 100);
     document.documentElement.style.zoom = z;
+    document.documentElement.style.setProperty("--hud-z", z);
     const hudVal = $("#hud-scale-val");
     if (hudVal) hudVal.textContent = n + "%";
   }
@@ -4332,6 +5463,8 @@
     if (sound) sound.checked = state.profile.soundOn !== false;
     const watch = $("#set-simwatch");
     if (watch) watch.checked = !!state.profile.simWatch;
+    const reviews = $("#set-reviews");
+    if (reviews) reviews.checked = state.profile.reviewsOn !== false;
     const hud = $("#set-hud");
     const hudVal = $("#hud-scale-val");
     const scale = clampHud(state.profile.hudScale);
@@ -4604,8 +5737,8 @@
   }
 
   function ifrRideHtml(lic) {
-    if (hasIfr()) return `<p class="muted pad-top">Instrument Rating held. IFR weather does not post a penalty.</p>`;
-    if (!lic || lic.n < 2) return `<p class="muted pad-top">Private certificate is required before an instrument checkride.</p>`;
+    if (hasIfr()) return `<p class="log-note">Instrument Rating held. IFR weather does not post a penalty.</p>`;
+    if (!lic || lic.n < 2) return `<p class="log-note">Private Pilot required before Instrument IFR checkride.</p>`;
     const fee = ifrFee();
     const broke = fee && (state.profile.money || 0) < fee;
     return `
@@ -4731,11 +5864,13 @@
     const hi = lic.next ? lic.next.xp : lo;
     const pct = lic.next ? Math.min(100, Math.round(((p.xp - lo) / Math.max(1, hi - lo)) * 100)) : 100;
     const nextTxt = lic.next
-      ? `NEXT ${lic.next.name} · ${p.xp} / ${lic.next.xp} XP`
+      ? `${p.xp} / ${lic.next.xp} XP → ${lic.next.name}`
       : `${p.xp} XP · GRADE CEILING`;
     const ticks = LICENSES.map((L) => {
-      const on = lic.n >= L.n;
-      return `<span class="${on ? "have" : ""}">${esc(L.name.replace(" PILOT", "").replace(" RATING", " IFR"))}</span>`;
+      const now = lic.n === L.n;
+      const on = lic.n > L.n;
+      const label = L.name.replace(" PILOT", "").replace(" RATING", " IFR");
+      return `<span class="${now ? "now" : on ? "have" : ""}">${esc(label)}</span>`;
     }).join("");
     const { list } = badges();
     const st = pilotStats();
@@ -4748,47 +5883,55 @@
       stamped = true;
     });
     if (stamped) saveProfile();
-    const recent = list
-      .filter((b) => b.have && !b.hidden)
-      .sort((a, b) => (st.achAt[b.id] || 0) - (st.achAt[a.id] || 0))
-      .slice(0, 6);
+    const earned = list.filter((b) => b.have && !b.hidden);
+    const recent = earned
+      .sort((a, b) => (st.achAt[b.id] || 0) - (st.achAt[a.id] || 0));
+    const milesOpen = !!state.milesOpen;
+    const reviews = Array.isArray(p.reviews) ? p.reviews.slice(0, 3) : [];
+    const rep = p.repN ? ((p.repSum || 0) / p.repN).toFixed(2) : "";
     el.innerHTML = `
-      <p class="pedia-kicker">PILOT CAREER</p>
-      <h2>${esc(lic.name)}</h2>
-      <p class="muted">${esc(nextTxt)}</p>
-      <div class="xp-track wide"><div style="width:${pct}%"></div></div>
-      <div class="career-ratings">${ticks}</div>
-      <div class="wx-grid debrief-grid">
-        <div><span>SORTIES</span><b>${flown.length}</b></div>
-        <div><span>CAREER</span><b>${career.length}</b></div>
-        <div><span>HOURS</span><b>${hours.toFixed(1)}</b></div>
-        <div><span>DISTANCE</span><b>${fmtNm(nm)}</b></div>
-        <div><span>AIRFIELDS</span><b>${fields.size}</b></div>
-        <div><span>AIRCRAFT</span><b>${acIds.size}</b></div>
-        <div><span>LANDMARKS</span><b>${marks.size}</b></div>
-      </div>
-      ${recent.length ? `<p class="pedia-kicker">MILESTONES</p><ul class="debrief-list">${recent.map((b) => `<li><b>${esc(b.label)}</b> ${esc(b.info)}</li>`).join("")}</ul>` : ""}
-      ${ifrRideHtml(lic)}
+      <section class="log-card log-career">
+        <h2 class="log-rank">${esc(lic.name)}</h2>
+        <p class="log-nextxp">${esc(nextTxt)}</p>
+        <div class="xp-track wide"><div style="width:${pct}%"></div></div>
+        <div class="career-ratings">${ticks}</div>
+        ${ifrRideHtml(lic)}
+      </section>
+      <section class="log-card">
+        <h3>CAREER STATISTICS</h3>
+        <div class="log-stats">
+          <div><b>${flown.length}</b><span>SORTIES</span></div>
+          <div><b>${career.length}</b><span>CAREER</span></div>
+          <div><b>${hours.toFixed(1)}</b><span>HOURS</span></div>
+          <div><b>${fmtNm(nm)}</b><span>DISTANCE</span></div>
+          <div><b>${fields.size}</b><span>AIRFIELDS</span></div>
+          <div><b>${acIds.size}</b><span>AIRCRAFT</span></div>
+          <div><b>${marks.size}</b><span>LANDMARKS</span></div>
+        </div>
+      </section>
+      <section class="log-card log-rep">
+        <h3>REPUTATION</h3>
+        ${rep ? `<p class="log-rep-score">${rep} ★</p>
+          <p class="log-rep-count">${p.repN} customer review${p.repN === 1 ? "" : "s"}</p>
+          ${reviews.map((r) => `<div class="log-quote"><p class="review-stars">${starGlyph(r.stars)}</p><p>${esc(r.text || "")}</p></div>`).join("")}`
+          : `<p class="log-note">No customer reviews yet.</p>`}
+      </section>
+      <section class="log-card log-mile-card">
+        <button type="button" class="log-miles-toggle" id="log-miles">
+          <span>MILESTONES · ${earned.length} COMPLETED</span>
+          <span aria-hidden="true">${milesOpen ? "▲" : "▼"}</span>
+        </button>
+        ${milesOpen ? `<div class="log-miles">${recent.length ? recent.map((b) => `<div class="log-mile"><b><span class="log-tick">✓</span> ${esc(b.label)}</b><span>${esc(b.info)}</span></div>`).join("") : `<p class="log-note">No milestones yet.</p>`}</div>` : ""}
+      </section>
     `;
   }
 
   function renderLog() {
     const { flown } = flownStats();
-    const hours = flown.reduce((s, m) => s + (m.hours || 0), 0);
-    const nm = flown.reduce((s, m) => s + (m.dist || 0), 0);
     const xp = flown.reduce((s, m) => s + (m.xp || 0), 0);
     const rk = rankFor(state.profile.xp || xp);
-    const nextTxt = rk.next
-      ? `${state.profile.xp || xp} / ${rk.next.xp} XP → ${rk.next.name}`
-      : `${state.profile.xp || xp} XP · GRADE CEILING`;
     const stats = $("#pilot-stats");
-    if (stats) stats.innerHTML = `
-      <span>${rk.name}</span>
-      <span>${nextTxt}</span>
-      <span>${flown.length} flown</span>
-      <span>${hours.toFixed(1)} hr</span>
-      <span>${fmtNm(nm)}</span>
-    `;
+    if (stats) stats.innerHTML = "";
     const bar = $("#xp-bar");
     if (bar) {
       const lo = rk.xp;
@@ -4808,18 +5951,23 @@
       .map((m) => {
         const mode = modeTag(m);
         const pay = m.mode === "airline"
-          ? `${m.xp || xpFor(m)}xp ${moneyFmt(m.money || 0)}`
+          ? `${m.xp || xpFor(m)} XP · ${moneyFmt(m.money || 0)}`
           : moneyFmt(m.money || 0);
         const when = fmtDate(m.flownAt || m.acceptedAt);
+        const kind = TYPES.find((t) => t.id === m.type)?.label || m.type;
+        const grade = m.grade ? `${m.grade}${m.score != null ? " " + m.score : ""}` : "";
         return `
-        <div class="log-row">
-          <div>
-            <b>${icaoOf(m.dep)} → ${icaoOf(m.dest)}</b>
-            <span>${fieldCaption(m.dep)} → ${fieldCaption(m.dest)}</span>
-            <span>${mode}${when ? " · " + when : ""}${m.grade ? " · " + m.grade + (m.score != null ? " " + m.score : "") : ""} · ${TYPES.find((t) => t.id === m.type)?.label || m.type} · ${fmtNm(m.dist)} · ${m.acName}${m.flown ? " · flown" : ""} · ${pay}</span>
+        <article class="sortie">
+          <div class="sortie-top">
+            <div>
+              <b>${esc(icaoOf(m.dep))} → ${esc(icaoOf(m.dest))}</b>
+              <span>${esc(fieldCaption(m.dep))} → ${esc(fieldCaption(m.dest))}</span>
+            </div>
+            <button class="ghost tiny copy-log" data-id="${m.id}">COPY</button>
           </div>
-          <button class="ghost tiny copy-log" data-id="${m.id}">copy</button>
-        </div>`;
+          <p class="sortie-meta">${mode}${when ? " · " + when : ""}${grade ? " · " + grade : ""} · ${kind} · ${fmtNm(m.dist)}</p>
+          <p class="sortie-ship">${esc(m.acName || "")}${m.flown ? " · FLOWN" : ""}${pay ? " · " + pay : ""}</p>
+        </article>`;
       })
       .join("");
   }
@@ -4939,6 +6087,7 @@
       state.acMaker = ac.maker;
       try { localStorage.setItem("twofly-ac", ac.id); } catch {}
       renderAcMeta();
+      fillJobTypes();
       syncFav();
     });
     $("#ac-fav")?.addEventListener("click", () => {
@@ -5014,6 +6163,12 @@
     $("#go-home")?.addEventListener("click", () => {
       const home = homeField();
       if (home) selectDep(home);
+    });
+    $("#dep-random")?.addEventListener("click", () => randomDep());
+    $("#dep-paved")?.addEventListener("change", (e) => {
+      state.depPaved = !!e.target.checked;
+      try { localStorage.setItem("twofly-dep-paved", state.depPaved ? "1" : "0"); } catch (err) {}
+      persistStore();
     });
     $("#set-home")?.addEventListener("click", () => {
       if (!state.dep) return;
@@ -5145,6 +6300,11 @@
     });
 
     $("#clear-log").addEventListener("click", () => openConfirm("log"));
+    $("#career-file")?.addEventListener("click", (e) => {
+      if (!e.target.closest("#log-miles")) return;
+      state.milesOpen = !state.milesOpen;
+      renderCareerFile();
+    });
     $("#clear-book")?.addEventListener("click", () => openConfirm("book"));
     $("#clear-all")?.addEventListener("click", () => openConfirm("all"));
     $("#backup-export")?.addEventListener("click", exportBackup);
@@ -5340,6 +6500,19 @@
     $("#pedia").addEventListener("click", (e) => {
       if (e.target.id === "pedia") $("#pedia").hidden = true;
     });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const confirm = $("#confirm");
+      const ride = $("#checkride");
+      const debrief = $("#debrief");
+      const pedia = $("#pedia");
+      const welcome = $("#welcome");
+      if (confirm && !confirm.hidden) { $("#confirm-no")?.click(); return; }
+      if (ride && !ride.hidden) { closeCheckride(); return; }
+      if (pedia && !pedia.hidden) { pedia.hidden = true; return; }
+      if (welcome && !welcome.hidden) { dismissWelcome(); return; }
+      if (debrief && !debrief.hidden) { $("#debrief-go")?.click(); }
+    });
 
     const nameIn = $("#pilot-name");
     const lineIn = $("#airline-name");
@@ -5437,6 +6610,11 @@
       state.profile.simWatch = e.target.checked;
       saveProfile();
       pollSim().then(() => { if (state.active) renderActive(); });
+    });
+    $("#set-reviews")?.addEventListener("change", (e) => {
+      state.profile.reviewsOn = e.target.checked;
+      saveProfile();
+      renderCareerFile();
     });
     const hudIn = $("#set-hud");
     const setHud = (raw) => {
@@ -5563,7 +6741,7 @@
           note.textContent = "";
         }
         const lab = $("#fleet-label");
-        if (lab && state.profile) lab.textContent = `FLEET ${state.profile.hangar.length}/${HANGAR_CAP}`;
+        if (lab && state.profile) lab.textContent = `FLEET ${state.profile.hangar.length}/${hangarCap()}`;
       }
       setTimeout(() => {
         renderHangar();
@@ -5572,6 +6750,46 @@
         renderAirline();
       }, 0);
     });
+  }
+
+  function syncDepPaved() {
+    let on = false;
+    try { on = localStorage.getItem("twofly-dep-paved") === "1"; } catch (e) {}
+    state.depPaved = on;
+    const box = $("#dep-paved");
+    if (box) box.checked = on;
+  }
+
+  function randomDep() {
+    const ac = state.ac;
+    if (!ac || !airports.length) return;
+    const rotor = isRotor(ac);
+    const amphib = isAmphib(ac);
+    const needPaved = !!(state.depPaved || (ac.paved && ac.cls !== "bush" && !rotor));
+    const ok = (a, paved) => {
+      if (!a || !a.id) return false;
+      const k = fieldKind(a);
+      if (k === "helipad" && !rotor) return false;
+      if (k === "seaplane" && !amphib) return false;
+      if (ac.cls === "airliner" && a.t === "S") return false;
+      if (runwayTooShort(a, ac, 1)) return false;
+      if (paved && !a.pv) return false;
+      return true;
+    };
+    const sample = (paved) => {
+      let count = 0;
+      let chosen = null;
+      for (const a of airports) {
+        if (!ok(a, paved)) continue;
+        count++;
+        if (Math.random() < 1 / count) chosen = a;
+      }
+      return chosen;
+    };
+    const pick = state.depPaved ? sample(true) : (sample(needPaved) || sample(false));
+    if (pick) selectDep(pick);
+    const box = $("#suggest");
+    if (box) box.hidden = true;
   }
 
   function selectDep(a) {
@@ -5626,6 +6844,7 @@
     run(renderSettings);
     run(applyHudScale);
     run(bind);
+    run(syncDepPaved);
     run(tickClock);
     run(() => {
       settleDesk();
@@ -5649,7 +6868,7 @@
   const STORE_KEYS = [
     "twofly-pilot-file", "twofly-log", "twofly-pedia", "twofly-active",
     "twofly-active-free", "twofly-active-airline", "twofly-collection",
-    "twofly-owned", "twofly-ac", "twofly-dep", "twofly-pilot",
+    "twofly-owned", "twofly-ac", "twofly-dep", "twofly-dep-paved", "twofly-pilot",
     "twofly-seen-welcome",
   ];
 
@@ -5784,6 +7003,7 @@
 
   function resetAllProgress() {
     STORE_KEYS.forEach((k) => localStorage.removeItem(k));
+    syncDepPaved();
     state.profile = defaultProfile();
     state.log = [];
     state.collection = emptyCollection();
@@ -5837,7 +7057,7 @@
     }
     loadAirports();
     hydrateStore().then(function () {
-      try { reloadFromStorage(); } catch (e) {}
+      try { reloadFromStorage(); syncDepPaved(); } catch (e) {}
       try { renderPilotChip(); renderLog(); renderBook(); renderHangar(); renderAirline(); renderAircraft(); renderDep(); } catch (e) {}
     });
   }

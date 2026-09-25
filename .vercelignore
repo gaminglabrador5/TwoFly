@@ -1,0 +1,8 @@
+TwoFly.zip
+*.exe
+attachments
+artifacts
+.vercel
+.git
+screenshots
+node_modules

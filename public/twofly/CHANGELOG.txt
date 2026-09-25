@@ -5,6 +5,209 @@ Pack: TwoFly.exe + README.txt + LICENSE + CHANGELOG.txt
 Windows 10/11 64-bit. Double-click. No installer. No Community folder. No sim connection.
 
 --------------------------------------------------------------------------
+24 Sep 2026 — v1.9.69 Logbook layout
+--------------------------------------------------------------------------
+- The logbook is split into rank, statistics, reputation, milestones, and flight history. The old summary line under the career file is gone. Clear Log sits aside as a quiet control.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.68 Welcome and help
+--------------------------------------------------------------------------
+- The welcome popup no longer repeats the steps under the list. Crash detection and the SimConnect log are gone from the Help tab.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.67 Reviews do not repeat a line
+--------------------------------------------------------------------------
+- A review drops a sentence it already said, including a closer that repeats the opening.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.66 Offline review wording
+--------------------------------------------------------------------------
+- A flight with no sim rating uses its own review lines. Sim-scored flights keep the landing, bounce, and go-around lines.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.65 Review without a sim rating
+--------------------------------------------------------------------------
+- If the sim is offline, a finished flight still gets a review. It is treated as complete, and it does not mention a landing, a bounce, or a go-around.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.64 Review wording
+--------------------------------------------------------------------------
+- Customer reviews use the rewritten lines. A name is still the pilot, the company, both, or neither, and a line that needs a name is skipped when the draw is neither.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.63 Reviews can skip names
+--------------------------------------------------------------------------
+- A review may use the pilot, the company, both, or neither. With no company on the file, it uses the pilot or no name at all.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.62 Review names
+--------------------------------------------------------------------------
+- A review uses the pilot name when no company is set, or when Show Company is off. With a company shown, a review uses the pilot, the company, or both.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.61 Customer reviews
+--------------------------------------------------------------------------
+- A finished passenger, cargo, medevac, or official flight leaves one review, written from the landing, the weather, and whether the arrival made its window. A crash, an abort, or a reposition leaves none. The pilot file keeps the average. Turn it off under Customer Reviews.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.60 Hangar grows with rank
+--------------------------------------------------------------------------
+- The hangar starts at 1 aircraft. Private raises it to 2, Instrument to 4, Commercial to 6, and ATP to 10. Aircraft you already own are not removed if you are over the new cap.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.59 Touchdown rate
+--------------------------------------------------------------------------
+- A still airplane before the flight starts no longer causes the height field to be deleted. The landing rate is taken from the last descent if height never arrives. This flight logged 0 fpm and the report said the rate was not recorded.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.58 Paved destination stays paved
+--------------------------------------------------------------------------
+- Paved Destination Only is no longer dropped when the board is short. Unpaved strips stay off the list while that box is checked.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.57 Leg length
+--------------------------------------------------------------------------
+- Leg length is now Brief 15–30, Short 25–100, Medium 150–300, Long 500–1000, and XL 1000+. Short Field is gone. The airplane's range still caps a leg.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.56 Confirm dialog
+--------------------------------------------------------------------------
+- Clear All Progress shows the whole warning. The last line is no longer cut off under the buttons.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.55 Five jobs on a base
+--------------------------------------------------------------------------
+- A military field or helipad only offers official, courier, rotation, cargo, and medevac. Any other field can offer every job the airplane can fly, including official and courier. Rotation still has to end on a military field.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.54 Bases only take the three
+--------------------------------------------------------------------------
+- A military field, in or out, only gets official, courier, or rotation. Cargo and medevac stay off the bases. Any other field can take every job the airplane can fly.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.53 What the airplane can do
+--------------------------------------------------------------------------
+- The task list follows the airplane. Air ambulance stops at a light twin turboprop: pistons, bush planes, helicopters, and King Air sized turboprops. A jet or an airliner cannot take one. A smaller airplane can still take any job it can actually fly. A freighter does not get passengers.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.52 Official, courier, rotation
+--------------------------------------------------------------------------
+- Military fields can take an official party, a sealed courier run, or a duty rotation, along with cargo and medevac. The official is a general, a minister, a president, or someone else with a title. Passengers still do not go there. From a civilian field, about one card on the board may be one of those jobs, and it only goes to a military field. In Career they unlock with the commercial certificate.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.51 Military fields
+--------------------------------------------------------------------------
+- Air force bases, naval air stations, army fields, and helipads on those bases only take cargo and medevac. Passengers, priority, resupply, and reposition stay off them. Departing one only offers those two.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.50 Tasking lines
+--------------------------------------------------------------------------
+- Tasking copy is rewritten. Same openings, weather, field notes, and closers, with more ways to say them. Medevac stays serious.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.49 Explain the category
+--------------------------------------------------------------------------
+- Explain This says what VFR, MVFR, IFR, and LIFR mean, and which ceiling or visibility in this METAR put the field in that category.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.48 Sim status line
+--------------------------------------------------------------------------
+- When the sim is connected but the flight has not started, the desk says SIM ONLINE · FLIGHT NOT STARTED.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.47 Paved random
+--------------------------------------------------------------------------
+- Departure has a Paved runway only box. While it is on, Random stays on paved runways. Off leaves Random as it was.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.46 Help
+--------------------------------------------------------------------------
+- The Help page is rewritten. Same sections, plainer words.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.45 Runway length and a parked airplane
+--------------------------------------------------------------------------
+- A strip with no runway length on file is treated as 1,500 ft. A long-runway aircraft is not sent there. 3,366 strips had no length, and the old check skipped them.
+- RANDOM uses the same rules as a tasking: runway length, paved when the aircraft wants it, no small strips for an airliner.
+- Sitting still on the ramp, or shutting down after landing, is not treated as frozen sim data. Frozen means the sim is reporting an empty airplane.
+- A new sortie cannot pick up the previous landing if that report arrives late.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.44 Sim Watch data freeze
+--------------------------------------------------------------------------
+- Aircraft data is requested only after the simulator finishes opening the connection. A field the sim rejects is dropped and the request is sent again, so one bad field cannot freeze speed and height.
+- If the numbers still do not move, the sortie says the sim data never updated. It does not say Complete was pressed early.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.43 Aircraft by name
+--------------------------------------------------------------------------
+- Tasking notes name the aircraft and say what it is good for, instead of "this type." The landing note does the same.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.42 Debrief scroll
+--------------------------------------------------------------------------
+- The sortie-complete window scrolls when the rating, pay, and notes do not fit. The Continue button stays on screen.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.41 Landing field
+--------------------------------------------------------------------------
+- A bump at the departure field is no longer logged as the landing. The landing is the return to the ground after the aircraft has climbed or moved away.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.40 Random departure
+--------------------------------------------------------------------------
+- RANDOM on the departure field picks an airfield the current aircraft can use.
+- Airplanes never get a helipad, as a departure or a tasking. Helicopters get the same fields airplanes do, plus pads.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.39 Strips, heliports, seaplane bases
+--------------------------------------------------------------------------
+- Added the remaining strips worldwide, every heliport, and every seaplane base. 71,237 fields are on file.
+- Closed airports and balloon ports were not added.
+- A landplane is not tasked to a seaplane base. Heliports stay on rotor aircraft. An unknown strip is treated as short, so a long-runway aircraft is not sent there.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.38 Small four-letter fields
+--------------------------------------------------------------------------
+- Added 3,114 small airports whose code is four letters but was never filed as an official ICAO code. Wiladatika (WIHC) is one of them.
+- Searching WIHC now finds Wiladatika Airport.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.37 Go-around
+--------------------------------------------------------------------------
+- A go-around is no longer flagged on takeoff. It counts only after a descent from pattern altitude and a climb away before landing.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.36 SimConnect log
+--------------------------------------------------------------------------
+- Sim Watch writes logs\simconnect.log next to TwoFly.exe.
+- Each line says what was tried and why it succeeded or failed: the DLL, the open, each variable, exceptions, and crash or landing decisions.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.35 Popup scale
+--------------------------------------------------------------------------
+- Popups stay inside the window above 120% scale. Close, Cancel, and Continue stay on screen.
+- Escape closes the open popup.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.34 Local airfields
+--------------------------------------------------------------------------
+- Added 1,952 US public-style local fields that have no ICAO code, including Shiprock (5V5).
+- Searching 5V5 now finds Shiprock Airstrip. The same applies to the rest of that local-code group.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.33 City cards
+--------------------------------------------------------------------------
+- Added Barcelona, Kyoto, and Queenstown as city postcards.
+- A city card unlocks when a completed sortie uses a field within 30 nautical miles of that city.
+
+--------------------------------------------------------------------------
+23 Sep 2026 — v1.9.32 Airport cards
+--------------------------------------------------------------------------
+- Replaced the Gibraltar (LXGB) postcard.
+- Added Narita International (RJAA) as an airport postcard.
+
+--------------------------------------------------------------------------
 23 Sep 2026 — v1.9.31 Stamp art
 --------------------------------------------------------------------------
 - Baked the supplied airport, city, and landmark art. Airport files use the ICAO in capitals.
