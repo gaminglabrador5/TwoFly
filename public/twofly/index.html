@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TwoFly — Dispatch</title>
-  <link rel="icon" href="logo-mark.png?v=1.9.69" />
-  <link rel="stylesheet" href="style.css?v=1.9.69" />
+  <link rel="icon" href="logo-mark.png?v=1.9.86" />
+  <link rel="stylesheet" href="style.css?v=1.9.86" />
 </head>
 <body>
   <div class="wrap">
     <header class="top">
       <div class="brand">
-        <h1 class="logo"><img src="logo.png?v=1.9.69" alt="TwoFly" /></h1>
+        <h1 class="logo"><img src="logo.png?v=1.9.86" alt="TwoFly" /></h1>
         <p class="tiny clock" id="desk-clock"></p>
         <div class="tiny sim-line off" id="sim-line">SIM OFFLINE</div>
       </div>
@@ -33,45 +33,25 @@
     <div id="view-desk">
     <p class="tab-blurb" id="desk-blurb">
       <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
+      <span class="desk-mode" id="desk-mode">FREE FLIGHT · Any aircraft on file. No rank or ownership restrictions.</span>
       <span class="blurb-long" hidden id="desk-blurb-long">FREE FLIGHT lets you take civilian taskings from any airfield. Every aircraft type in your files is eligible. Completing a sortie adds the payment to your pilot file. Rank restrictions and hangar ownership do not apply.</span>
     </p>
     <div class="grid">
-      <div class="desk-col">
       <section class="panel">
-        <label for="dep-input">DEPARTURE AIRFIELD</label>
+        <label for="dep-input">WHERE ARE YOU?</label>
         <div class="dep-search">
           <input id="dep-input" type="text" placeholder="ICAO, NAME, CITY" autocomplete="off" spellcheck="false" />
-          <button type="button" id="dep-random" class="ghost tiny">RANDOM</button>
           <div id="suggest" hidden></div>
         </div>
-        <label class="check"><input id="dep-paved" type="checkbox" /> PAVED RUNWAY ONLY</label>
+        <div id="dep-card"></div>
+        <label class="check"><input id="dep-paved" type="checkbox" /> PAVED RUNWAYS ONLY</label>
+        <button type="button" id="dep-random" class="ghost">RANDOMIZE</button>
         <div id="home-row" class="home-row">
           <button type="button" id="go-home" class="ghost tiny">HOME</button>
           <button type="button" id="set-home" class="ghost tiny">SET HOME</button>
           <span id="home-meta" class="muted">NO HOME FIELD SET</span>
         </div>
-        <div id="dep-card"></div>
       </section>
-
-      <section class="panel" id="wx">
-        <div class="wx-stack">
-          <div class="wx-slot">
-            <div class="daily-top">
-              <span class="tag">DEPARTURE</span>
-              <span class="muted" id="wx-meta">SELECT AIRFIELD</span>
-            </div>
-            <div id="wx-body"><p class="muted">NO AIRFIELD SELECTED.</p></div>
-          </div>
-          <div class="wx-slot">
-            <div class="daily-top">
-              <span class="tag">ARRIVAL</span>
-              <span class="muted" id="wx-arr-meta">NO DESTINATION</span>
-            </div>
-            <div id="wx-arr-body"><p class="muted">ISSUE OR SELECT A TASKING.</p></div>
-          </div>
-        </div>
-      </section>
-      </div>
 
       <section class="panel">
         <label for="ac-search">AIRCRAFT</label>
@@ -83,7 +63,7 @@
           <button type="button" data-filter="turboprop">TURBOPROP</button>
           <button type="button" data-filter="jet">JET</button>
           <button type="button" data-filter="helo">ROTOR</button>
-          <button type="button" data-filter="owned">FAVORITE</button>
+          <button type="button" data-filter="owned">★</button>
         </div>
         <div class="row ac-pick">
           <div>
@@ -99,29 +79,34 @@
           </div>
         </div>
         <div id="ac-meta"></div>
-        <div class="row">
-          <div>
-            <label for="hop">LEG LENGTH</label>
-            <select id="hop">
-              <option value="auto">ANY DISTANCE</option>
-              <option value="brief">BRIEF 15–30 NM</option>
-              <option value="short">SHORT 25–100 NM</option>
-              <option value="medium">MEDIUM 150–300 NM</option>
-              <option value="long">LONG 500–1000 NM</option>
-              <option value="xl">XL 1000+ NM</option>
-            </select>
-          </div>
-          <div>
-            <label for="type">TASK CATEGORY</label>
-            <select id="type"></select>
-          </div>
-        </div>
-        <label class="check"><input id="hard" type="checkbox" /> PAVED DESTINATION ONLY</label>
       </section>
     </div>
 
+    <section class="panel mission-board">
+      <label>MISSION BOARD</label>
+      <p class="board-note">Let TwoFly decide the rest.</p>
+      <div class="row">
+        <div>
+          <label for="hop">DISTANCE</label>
+          <select id="hop">
+            <option value="auto">ANY DISTANCE</option>
+            <option value="brief">BRIEF 15–30 NM</option>
+            <option value="short">SHORT 25–100 NM</option>
+            <option value="medium">MEDIUM 150–300 NM</option>
+            <option value="long">LONG 500–1000 NM</option>
+            <option value="xl">XL 1000+ NM</option>
+          </select>
+        </div>
+        <div>
+          <label for="type">JOB TYPE</label>
+          <select id="type"></select>
+        </div>
+      </div>
+      <label class="check"><input id="hard" type="checkbox" /> PAVED DESTINATION ONLY</label>
+    </section>
+
     <div class="actions">
-      <p class="issue-kicker">NUMBER OF TASKINGS</p>
+      <p class="issue-kicker">TASKINGS</p>
       <div class="issue-n filters" id="issue-n">
         <button type="button" data-n="1">1</button>
         <button type="button" data-n="3">3</button>
@@ -130,9 +115,32 @@
       <button id="go" type="button">ISSUE 5 TASKINGS</button>
     </div>
 
-    <section class="panel" id="active"></section>
+    <section class="panel" id="wx">
+      <label>FLIGHT CONDITIONS</label>
+      <div class="wx-stack">
+        <div class="wx-slot">
+          <div class="daily-top">
+            <span class="tag">DEPARTURE</span>
+            <span class="muted" id="wx-meta">SELECT AIRFIELD</span>
+          </div>
+          <div id="wx-body"><p class="muted">NO AIRFIELD SELECTED.</p></div>
+        </div>
+        <div class="wx-slot">
+          <div class="daily-top">
+            <span class="tag">ARRIVAL</span>
+            <span class="muted" id="wx-arr-meta">NO DESTINATION</span>
+          </div>
+          <div id="wx-arr-body"><p class="muted">ISSUE OR SELECT A TASKING.</p></div>
+        </div>
+      </div>
+    </section>
 
-    <div id="missions"></div>
+    <div id="flight-board">
+      <p class="issue-kicker" id="board-kicker" hidden>FLIGHT BOARD</p>
+      <div id="missions"></div>
+    </div>
+
+    <section class="panel" id="active"></section>
     </div>
 
     <div id="view-book" hidden>
@@ -163,24 +171,29 @@
     <div id="view-hangar" hidden>
       <p class="tab-blurb">
         <button type="button" class="blurb-more" aria-label="Help" aria-expanded="false">?</button>
-        <span class="blurb-long" hidden>Buy, lease, or sell aircraft for CAREER MODE. Daily lease payments count toward ownership; buy it out for the remainder or return it free. The hangar starts at 1 aircraft and grows with rank: Private 2, Instrument 4, Commercial 6, ATP 10. Aircraft you already own stay if you are over the cap. Maintenance is tracked for each type. Registration comes from the simulator.</span>
+        <span class="blurb-long" hidden>Buy, lease, or sell aircraft for CAREER MODE. The used board lists eight aircraft each day: piston, bush, vintage, and turboprop under 12 seats, already below full health. Daily lease payments count toward ownership; buy it out for the remainder or return it free. The hangar starts at 1 aircraft and grows with rank: Private 2, Instrument 4, Commercial 6, ATP 10. Aircraft you already own stay if you are over the cap. Maintenance is tracked for each type. Set a tail on the aircraft, or leave it blank and the simulator registration is kept after a flight.</span>
       </p>
       <p class="err" id="hangar-err" hidden></p>
-      <section class="panel" id="loan-panel"></section>
       <section class="panel">
-        <label id="fleet-label">FLEET 0/10</label>
+        <label id="fleet-label">YOUR FLEET</label>
+        <p class="fleet-count" id="fleet-count">0 / 1 AIRCRAFT</p>
+        <p class="board-note" id="fleet-note">The hangar is empty.</p>
         <div id="fleet-list" class="fleet"></div>
       </section>
+      <section class="panel" id="loan-panel"></section>
       <section class="panel">
         <label for="mkt-search">AIRCRAFT MARKET</label>
-        <input id="mkt-search" type="text" placeholder="SEARCH TYPE OR MANUFACTURER" autocomplete="off" />
+        <input id="mkt-search" type="text" placeholder="SEARCH AIRCRAFT OR MANUFACTURER" autocomplete="off" />
         <div id="mkt-filters" class="filters">
           <button type="button" data-mkt="all" class="on">ALL</button>
+          <button type="button" data-mkt="owned">OWNED</button>
+          <button type="button" data-mkt="used">USED</button>
           <button type="button" data-mkt="piston">PISTON</button>
           <button type="button" data-mkt="turboprop">TURBOPROP</button>
           <button type="button" data-mkt="jet">JET</button>
           <button type="button" data-mkt="helo">ROTOR</button>
         </div>
+        <p class="board-note" id="used-note" hidden>Eight listings a day. Piston, bush, vintage, and turboprop under 12 seats. Cheaper than new, and closer to service.</p>
         <div id="market-list" class="market"></div>
       </section>
     </div>
@@ -328,17 +341,14 @@
         </div>
         <label for="set-sim" class="pad-top">SIMULATOR</label>
         <select id="set-sim">
-          <option value="both">MSFS 2020 AND 2024</option>
           <option value="20">MSFS 2020</option>
           <option value="24">MSFS 2024</option>
         </select>
-        <p class="muted">Both shows every type. MSFS 2020 hides aircraft that exist only in 2024. MSFS 2024 hides the few community types that do not run there.</p>
         <label for="set-clock" class="pad-top">CLOCK</label>
         <select id="set-clock">
           <option value="24">24-HOUR</option>
           <option value="12">12-HOUR</option>
         </select>
-        <p class="muted">Desk clock is your time. Tasking DEP and ARR are local to the airfield.</p>
         <label for="set-ccy" class="pad-top">CURRENCY</label>
         <select id="set-ccy"></select>
         <label for="set-units" class="pad-top">UNITS</label>
@@ -352,7 +362,7 @@
           <input id="home-input" type="text" placeholder="ICAO, NAME, CITY" autocomplete="off" spellcheck="false" />
           <div id="home-suggest" hidden></div>
         </div>
-        <p class="muted" id="home-set-meta">USED BY THE HOME BUTTON IN CAREER MODE.</p>
+        <p class="muted" id="home-set-meta">This is your base of operations. Home in Career Mode will use this airport as your starting point.</p>
       </section>
       <section class="panel">
         <label>PROGRESS</label>
@@ -367,10 +377,10 @@
       </section>
       <section class="panel about-panel">
         <label>ABOUT</label>
-        <img class="about-logo" src="logo.png?v=1.9.69" alt="TwoFly" />
+        <img class="about-logo" src="logo.png?v=1.9.86" alt="TwoFly" />
         <p>TWOFLY · MIT LICENSE · 2026</p>
-        <p>A project designed and directed by gaminglabrador5, with software development assistance from Grok (xAI). Released as freeware. TwoFly is an independent project and is not affiliated with Microsoft or Asobo Studio.</p>
-        <p class="about-ver" id="about-ver">JS v1.9.69</p>
+        <p>A project designed and directed by gaminglabrador5. Logo design contributed by RaisinRum. Software development assistance from Grok (xAI). Writing assistance from GPT. Released as freeware. TwoFly is an independent project and is not affiliated with Microsoft or Asobo Studio.</p>
+        <p class="about-ver" id="about-ver">JS v1.9.86</p>
       </section>
     </div>
   </div>
@@ -449,9 +459,9 @@
         .then(function (d) {
           if (!el) return;
           if (d && d.version) el.textContent = "EXE " + d.version + " · " + (d.build || "");
-          else el.textContent = "JS v1.9.69";
+          else el.textContent = "JS v1.9.86";
         })
-        .catch(function () { if (el) el.textContent = "JS v1.9.69"; });
+        .catch(function () { if (el) el.textContent = "JS v1.9.86"; });
       setTimeout(function () {
         if (window.__twoflyReady) return;
         var chip = document.getElementById("pilot-chip");
@@ -461,12 +471,12 @@
       }, 8000);
     })();
   </script>
-  <script src="aircraft.js?v=1.9.69"></script>
-  <script src="landmarks.js?v=1.9.69"></script>
-  <script src="cities.js?v=1.9.69"></script>
-  <script src="ports.js?v=1.9.69"></script>
-  <script src="pedia-copy.js?v=1.9.69"></script>
-  <script src="helipads.js?v=1.9.69"></script>
-  <script src="app.js?v=1.9.69"></script>
+  <script src="aircraft.js?v=1.9.86"></script>
+  <script src="landmarks.js?v=1.9.86"></script>
+  <script src="cities.js?v=1.9.86"></script>
+  <script src="ports.js?v=1.9.86"></script>
+  <script src="pedia-copy.js?v=1.9.86"></script>
+  <script src="helipads.js?v=1.9.86"></script>
+  <script src="app.js?v=1.9.86"></script>
 </body>
 </html>

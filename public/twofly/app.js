@@ -1,7 +1,7 @@
 /* TwoFly — simple MSFS mission generator */
 (function () {
   window.__twoflyReady = true;
-  const VERSION = "1.9.69";
+  const VERSION = "1.9.86";
   let sessionFlights = 0;
   let sessionHard = 0;
   const $ = (sel, el = document) => el.querySelector(sel);
@@ -173,11 +173,17 @@
     auto: null,
   };
 
-  const CARGO = [
-    "GENERAL CARGO", "SPARE PARTS", "MEDICAL STORES", "SURVEY EQUIPMENT",
-    "PROVISIONS", "FUEL DRUMS", "AVIONICS REPLACEMENT", "MAIL SACKS",
-    "CONSTRUCTION MATERIAL", "COMMUNICATIONS GEAR",
-  ];
+  function cargoChoices(ac) {
+    const lbs = (ac && ac.payload) || 800;
+    const light = ["MAIL SACKS", "SPARE PARTS", "MEDICAL STORES", "SURVEY EQUIPMENT", "PROVISIONS", "AVIONICS REPLACEMENT", "COMMUNICATIONS GEAR", "TOOLS", "LAB SAMPLES"];
+    const mid = light.concat(["FUEL DRUMS", "CONSTRUCTION MATERIAL", "ENGINE PARTS", "FRESH PRODUCE", "GENERATOR SETS"]);
+    const heavy = ["PALLETIZED FREIGHT", "MACHINERY", "VEHICLES", "BUILDING SUPPLIES", "ENGINE PARTS", "FUEL DRUMS", "CONSTRUCTION MATERIAL"];
+    const freighter = ["CONTAINERS", "VEHICLES", "HEAVY MACHINERY", "AIRCRAFT PARTS", "PALLETIZED FREIGHT", "OVERSIZED CARGO"];
+    if (lbs >= 40000) return freighter;
+    if (lbs >= 8000) return heavy;
+    if (lbs >= 2000) return mid;
+    return light;
+  }
 
   const LANDMARKS = window.TWOFY_LANDMARKS || [];
   const CITIES = window.TWOFY_CITIES || [];
@@ -504,7 +510,10 @@
       repSum: 0,
       repN: 0,
       reviews: [],
+      standing: 50,
+      standingLast: 0,
       hangar: ["c172g"],
+      gift: "c172g",
       leases: {},
       lastLeaseAt: Date.now(),
       showAirline: true,
@@ -513,10 +522,11 @@
       tails: {},
       currency: "USD",
       units: "us",
-      sim: "both",
+      sim: "24",
       tempUnit: "C",
       home: "",
       debt: 0,
+      grant: 85000,
       certN: 1,
       stats: emptyStats(),
     };
@@ -567,10 +577,12 @@
         tails: raw.tails && typeof raw.tails === "object" ? raw.tails : {},
         currency: typeof raw.currency === "string" ? raw.currency : "USD",
         units: raw.units === "us" || raw.units === "eu" ? raw.units : (raw.units === "imperial" ? "us" : raw.units === "metric" ? "eu" : "us"),
-        sim: raw.sim === "20" || raw.sim === "24" ? raw.sim : "both",
+        sim: raw.sim === "20" ? "20" : "24",
         tempUnit: raw.tempUnit === "F" ? "F" : "C",
         home: typeof raw.home === "string" ? raw.home : "",
         debt: Number.isFinite(raw.debt) ? Math.max(0, raw.debt) : (raw.loan && Number.isFinite(raw.loan.remaining) ? Math.max(0, raw.loan.remaining) : 0),
+        grant: Number.isFinite(raw.grant) ? raw.grant : 0,
+        gift: typeof raw.gift === "string" ? raw.gift : "",
         stats: raw.stats && typeof raw.stats === "object" ? { ...emptyStats(), ...raw.stats } : emptyStats(),
         serviceOn: raw.serviceOn !== false,
         clock12: raw.clock12 === true,
@@ -583,6 +595,8 @@
         repSum: Number.isFinite(raw.repSum) ? raw.repSum : 0,
         repN: Number.isFinite(raw.repN) ? raw.repN : 0,
         reviews: Array.isArray(raw.reviews) ? raw.reviews.slice(0, 5) : [],
+        standing: Number.isFinite(raw.standing) ? Math.max(0, Math.min(100, raw.standing)) : seedStanding(raw),
+        standingLast: Number.isFinite(raw.standingLast) ? raw.standingLast : 0,
         leases: raw.leases && typeof raw.leases === "object" ? raw.leases : {},
         lastLeaseAt: Number(raw.lastLeaseAt) > 0 ? Number(raw.lastLeaseAt) : Date.now(),
         certN: Number.isFinite(raw.certN) ? Math.max(1, Number(raw.certN)) : 0,
@@ -685,6 +699,21 @@
 
   function classUnlocked(cls) {
     return unlockedClasses().has(cls);
+  }
+
+  function certForClass(cls) {
+    const hit = LICENSES.find((L) => (L.unlock || []).includes(cls));
+    return hit ? hit.name : "A HIGHER CERTIFICATE";
+  }
+
+  function clsWord(cls) {
+    if (cls === "helo" || cls === "evtol") return "ROTOR";
+    if (cls === "airliner" || cls === "jet") return "JET";
+    if (cls === "turboprop") return "TURBOPROP";
+    if (cls === "bush") return "BUSH";
+    if (cls === "vintage") return "VINTAGE";
+    if (cls === "airship") return "AIRSHIP";
+    return "PISTON";
   }
 
   function isCareer(m) {
@@ -845,6 +874,72 @@
     return Math.max(0, Math.round(pct * 10) / 10);
   }
 
+  function seedStanding(raw) {
+    const n = Number(raw && raw.repN) || 0;
+    if (!n) return 50;
+    const avg = (Number(raw.repSum) || 0) / n;
+    return Math.max(0, Math.min(100, Math.round(50 + (avg - 3) * 10)));
+  }
+
+  function starName(stars) {
+    const s = Math.round(Number(stars) || 0);
+    return ["", "POOR", "UNEVEN", "FAIR", "GOOD", "EXCELLENT"][s] || "";
+  }
+
+  function applyStanding(delta) {
+    const p = state.profile;
+    if (!p) return 0;
+    const cur = Number.isFinite(p.standing) ? p.standing : 50;
+    const next = Math.max(0, Math.min(100, cur + (delta || 0)));
+    const applied = next - cur;
+    p.standing = next;
+    p.standingLast = applied;
+    return applied;
+  }
+
+  function hangarEarned() {
+    const p = state.profile || {};
+    const n = (p.hangar || []).length;
+    return Math.max(0, n - (p.gift ? 1 : 0));
+  }
+
+  function standingShift(info) {
+    if (!info) return 0;
+    if (info.aborted) return info.customer ? -2 : 0;
+    if (info.crashed) return -8;
+    let d = 0;
+    const stars = info.review && info.review.stars;
+    if (stars >= 5) d += 2;
+    else if (stars >= 4) d += 1;
+    else if (stars && stars <= 1) d -= 3;
+    else if (stars && stars <= 2) d -= 2;
+    else if (!stars) d += 1;
+    const letter = info.score && info.score.letter;
+    if (letter === "S" || letter === "A") d += 1;
+    if (info.special) d += 2;
+    if (info.ifr) d -= 3;
+    return d;
+  }
+
+  function airframeTail(id) {
+    const saved = state.profile && state.profile.tails && state.profile.tails[id];
+    if (saved) return saved;
+    const hit = (state.log || []).find((m) => m && m.flown && m.acTail && (m.acId === id || m.ac === id));
+    return hit ? hit.acTail : "";
+  }
+
+  function cleanTail(raw) {
+    return String(raw || "").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 8);
+  }
+
+  function setAirframeTail(id, raw) {
+    if (!id || !inHangar(id)) return;
+    const next = cleanTail(raw);
+    state.profile.tails = state.profile.tails || {};
+    if (next) state.profile.tails[id] = next;
+    else delete state.profile.tails[id];
+    saveProfile();
+  }
   function healthColor(pct) {
     const t = Math.max(0, Math.min(1, pct / 100));
     const r = Math.round(196 + (46 - 196) * t);
@@ -1073,7 +1168,7 @@
 
   function sortieTail() {
     if (!simSnap || !simSnap.connected) return "";
-    return liveTail() || "TAIL UNKNOWN";
+    return liveTail();
   }
 
   function canSelectAc(ac) {
@@ -1148,6 +1243,8 @@
     const price = listPrice(ac);
     if (!state.profile.moneyOn) {
       state.profile.hangar.push(id);
+      state.profile.sinceService = state.profile.sinceService || {};
+      state.profile.sinceService[id] = 0;
       pilotStats().boughtAt[id] = new Date().toISOString();
       saveProfile();
       return "";
@@ -1155,9 +1252,108 @@
     if (state.profile.money < price) return "INSUFFICIENT FUNDS.";
     state.profile.money -= price;
     state.profile.hangar.push(id);
+    state.profile.sinceService = state.profile.sinceService || {};
+    state.profile.sinceService[id] = 0;
     const st = pilotStats();
     st.boughtAt[id] = new Date().toISOString();
     st.cashBuys = (st.cashBuys || 0) + 1;
+    saveProfile();
+    return "";
+  }
+
+  function usedEligible(ac) {
+    if (!ac || !simOk(ac) || !airlineEligible(ac)) return false;
+    if (ac.cls !== "piston" && ac.cls !== "bush" && ac.cls !== "vintage" && ac.cls !== "turboprop") return false;
+    return (ac.pax || 0) < 12;
+  }
+
+  function usedHash(s) {
+    let h = 2166136261;
+    const t = String(s || "");
+    for (let i = 0; i < t.length; i++) h = Math.imul(h ^ t.charCodeAt(i), 16777619);
+    return h >>> 0;
+  }
+
+  function usedDay() {
+    const d = new Date();
+    return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
+  }
+
+  function healthToSince(pct) {
+    const p = Math.max(50, Math.min(90, Number(pct) || 70));
+    return Math.round(((100 - p) * SERVICE_HRS / WEAR_DROP) * 10) / 10;
+  }
+
+  function priceAtHealth(ac, pct) {
+    const sound = listPrice(ac) * USED_RATIO;
+    const t = Math.max(0, Math.min(1, (Number(pct) || 0) / 100));
+    const scrap = sound * 0.1;
+    return Math.round(scrap + (sound - scrap) * t);
+  }
+
+  function usedAsk(ac, pct) {
+    const list = listPrice(ac);
+    const floor = priceAtHealth(ac, pct);
+    const wear = (90 - Math.max(50, Math.min(90, pct))) / 40;
+    let ask = Math.round(list * (1 - (0.08 + 0.12 * wear)) / 1000) * 1000;
+    if (ask <= floor) ask = Math.ceil((floor + 1000) / 1000) * 1000;
+    if (ask >= list) ask = Math.max(floor + 1000, list - 1000);
+    return ask;
+  }
+
+  function rollUsed(n, day) {
+    const pool = AIRCRAFT.filter((a) => usedEligible(a) && !inHangar(a.id));
+    const ranked = pool
+      .map((a) => ({ a, k: usedHash(a.id + "|" + day) }))
+      .sort((x, y) => x.k - y.k || (x.a.id < y.a.id ? -1 : 1));
+    return ranked.slice(0, n).map(({ a }) => ({
+      id: a.id,
+      pct: 50 + (usedHash("c|" + a.id + "|" + day) % 41),
+    }));
+  }
+
+  function ensureUsedBoard() {
+    const day = usedDay();
+    const cur = state.profile.usedMarket;
+    if (!cur || cur.day !== day || !Array.isArray(cur.rows)) {
+      state.profile.usedMarket = { day, rows: rollUsed(8, day) };
+      saveProfile();
+      return state.profile.usedMarket.rows;
+    }
+    const kept = cur.rows.filter((r) => {
+      const ac = AIRCRAFT.find((a) => a.id === r.id);
+      return r && ac && !inHangar(r.id) && usedEligible(ac) && r.pct >= 50 && r.pct <= 90;
+    });
+    if (kept.length !== cur.rows.length) {
+      state.profile.usedMarket = { day, rows: kept };
+      saveProfile();
+    }
+    return state.profile.usedMarket.rows;
+  }
+
+  function buyUsed(id) {
+    const board = ensureUsedBoard();
+    const row = board.find((r) => r.id === id);
+    if (!row) return "THAT LISTING IS GONE.";
+    const ac = AIRCRAFT.find((a) => a.id === id);
+    if (!ac) return "AIRCRAFT NOT ON FILE.";
+    if (inHangar(id)) return "ALREADY IN HANGAR.";
+    if (state.profile.hangar.length >= hangarCap()) return hangarFullMsg();
+    if (!usedEligible(ac)) return "NOT ON THE USED BOARD.";
+    if (state.profile.locksOn && !classUnlocked(ac.cls)) return "CERTIFICATE DOES NOT AUTHORIZE THIS CLASS.";
+    const price = usedAsk(ac, row.pct);
+    if (state.profile.moneyOn && state.profile.money < price) return "INSUFFICIENT FUNDS.";
+    if (state.profile.moneyOn) state.profile.money -= price;
+    state.profile.hangar.push(id);
+    const since = healthToSince(row.pct);
+    state.profile.sinceService = state.profile.sinceService || {};
+    state.profile.hours = state.profile.hours || {};
+    state.profile.sinceService[id] = since;
+    if ((state.profile.hours[id] || 0) < since) state.profile.hours[id] = since;
+    state.profile.usedMarket.rows = state.profile.usedMarket.rows.filter((r) => r.id !== id);
+    const st = pilotStats();
+    st.boughtAt[id] = new Date().toISOString();
+    if (state.profile.moneyOn) st.cashBuys = (st.cashBuys || 0) + 1;
     saveProfile();
     return "";
   }
@@ -1377,8 +1573,12 @@
     }
     const out = [];
     let deck = [];
+    const stand = state.profile && Number.isFinite(state.profile.standing) ? state.profile.standing : 50;
+    const boost = stand >= 70 ? ["vip", "official", "express", "medevac"] : stand < 40 ? ["cargo", "ferry", "pax", "bush"] : [];
     while (out.length < n) {
-      if (!deck.length) deck = shuffle(pool);
+      if (!deck.length) {
+        deck = shuffle(pool.concat(boost.filter((t) => pool.includes(t))));
+      }
       out.push(deck.pop());
     }
     return out;
@@ -1416,7 +1616,7 @@
       40,
       Math.round((0.25 + Math.random() * 0.6) * ac.payload / 10) * 10
     );
-    const item = pick(CARGO);
+    const item = pick(cargoChoices(ac));
     return { kind: "cargo", pax: 0, lbs, item, text: `${lbs} LB ${item}` };
   }
 
@@ -2054,6 +2254,10 @@
     const field = fieldTalk(type, dest, dist, m);
     const close = closeTalk(type);
     const parts = [why];
+    if (m && m.special) {
+      const sp = specialById(m.special);
+      if (sp) parts.unshift(sp.open(place));
+    }
     if (wx) parts.push(wx);
     if (field && parts.length < 3) parts.push(field);
     if (close && parts.length < 3) parts.push(close);
@@ -2108,6 +2312,45 @@
     if (ac.cls === "turboprop") return Math.min(Math.max(10000, elev + 4000), 25000);
     if (ac.cls === "jet" || ac.cls === "airliner") return dist > 400 ? 37000 : 28000;
     return 8500;
+  }
+
+  const SPECIALS = {
+    medevac: {
+      id: "urgent-med",
+      title: "URGENT MEDICAL TRANSFER",
+      pay: 1.35,
+      xp: 1.25,
+      open: (place) => `Urgent medical transfer. A patient needs to reach ${place}.`,
+      done: "The patient is at the destination. The transfer is complete.",
+    },
+    official: {
+      id: "gov",
+      title: "OFFICIAL TRANSPORT",
+      pay: 1.25,
+      xp: 1.2,
+      open: (place) => `Official transport. A government party is going to ${place}.`,
+      done: "The party is down. The transport is complete.",
+    },
+    bush: {
+      id: "resupply",
+      title: "REMOTE FIELD RESUPPLY",
+      pay: 1.3,
+      xp: 1.2,
+      open: (place) => `Remote field resupply. ${place} is waiting on these supplies.`,
+      done: "The supplies are on the ground. The field is resupplied.",
+    },
+    express: {
+      id: "priority",
+      title: "HIGH-PRIORITY EXPRESS",
+      pay: 1.3,
+      xp: 1.2,
+      open: (place) => `High-priority express. This shipment needs to be in ${place} on time.`,
+      done: "The shipment is in. The express is complete.",
+    },
+  };
+
+  function specialById(id) {
+    return Object.values(SPECIALS).find((s) => s.id === id) || null;
   }
 
   function generate() {
@@ -2226,6 +2469,7 @@
     const used = new Set();
     const out = [];
     let remaining = candidates.slice();
+    let specialUsed = false;
     while (out.length < n && remaining.length) {
       const type = types[out.length] || pick(types);
       const c = pickDest(remaining, type, ac);
@@ -2244,13 +2488,18 @@
       const pay = payloadFor(type, ac);
       const eteMin = Math.max(12, Math.round((dist / ac.cruise) * 60 + 12));
       const alt = cruiseAlt(ac, dist, dep, c.a);
-      const money = payout(type, dist, pay, ac);
-      const xp = xpFor({ type, dist, pay });
+      const sp = !specialUsed && SPECIALS[type] && Math.random() < 0.16 ? SPECIALS[type] : null;
+      if (sp) specialUsed = true;
+      const money = Math.round(payout(type, dist, pay, ac) * (sp ? sp.pay : 1) / 5) * 5;
+      const xp = Math.round(xpFor({ type, dist, pay }) * (sp ? sp.xp : 1));
       const delayMin = 10 + Math.floor(Math.random() * 11);
       const depMs = Date.now() + delayMin * 60000;
+      const draft = { depTime: new Date(depMs).toISOString(), special: sp ? sp.id : "" };
       out.push({
         id: `${Date.now().toString(36)}-${c.a.id}-${out.length}`,
         type,
+        special: sp ? sp.id : "",
+        specialTitle: sp ? sp.title : "",
         dep,
         dest: c.a,
         dist,
@@ -2262,11 +2511,11 @@
         xp,
         mode: state.mode,
         constraints: constraints(ac, c.a, type),
-        brief: briefing(type, dep, c.a, pay, dist, { depTime: new Date(depMs).toISOString() }),
+        brief: briefing(type, dep, c.a, pay, dist, draft),
         ac: ac.id,
         acName: ac.name,
         acTail: sortieTail(),
-        depTime: new Date(depMs).toISOString(),
+        depTime: draft.depTime,
         arrTime: new Date(depMs + eteMin * 60000).toISOString(),
       });
     }
@@ -2278,7 +2527,7 @@
     const t = TYPES.find((x) => x.id === m.type);
     return [
       `TWOFLY DISPATCH`,
-      `${(t && t.label) || m.type}  ·  ${icaoOf(m.dep)} ${fieldCaption(m.dep)} → ${icaoOf(m.dest)} ${fieldCaption(m.dest)}  ·  ${fmtNm(m.dist)}  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
+      `${(m.specialTitle || (t && t.label) || m.type)}  ·  ${icaoOf(m.dep)} ${fieldCaption(m.dep)} → ${icaoOf(m.dest)} ${fieldCaption(m.dest)}  ·  ${fmtNm(m.dist)}  ·  hdg ${String(m.hdg).padStart(3, "0")}°`,
       `Aircraft: ${m.acName}${m.acTail ? "  " + m.acTail : ""}`,
       `Payload: ${payLabel(m.pay)}`,
       `Suggested: ${fmtAlt(m.alt)} · ETE ~${fmtEte(m.eteMin)} · DEP ${fmtFieldTime(m.depTime, m.dep)} · ARR ${fmtFieldTime(m.arrTime, m.dest)}`,
@@ -2853,13 +3102,18 @@
     if (!box) return;
     if (!ap) {
       if (meta) meta.textContent = isArr ? "NO DESTINATION" : "SELECT AIRFIELD";
-      box.innerHTML = `<p class="muted">${isArr ? "ISSUE OR SELECT A TASKING." : "NO AIRFIELD SELECTED."}</p>`;
+      box.innerHTML = isArr
+        ? `<p class="wx-miss"><b>NO DESTINATION</b>Issue or select a tasking.</p>`
+        : `<p class="wx-miss"><b>NO DEPARTURE</b>Choose a field above.</p>`;
       return;
     }
     if (err) {
       if (meta) meta.textContent = ap.id;
       const offline = err === true ? weatherOffline() : !!(err && err.offline) || weatherOffline();
-      box.innerHTML = `<p class="muted">${offline ? "WEATHER SYSTEM OFFLINE." : "NO METAR DATA AVAILABLE."}</p>
+      box.innerHTML = offline
+        ? `<p class="wx-miss"><b>WEATHER UNAVAILABLE</b>Live conditions could not be retrieved. Mission generation is still available.</p>
+        <button type="button" class="ghost tiny" data-wx-refresh="${isArr ? "arr" : "dep"}">REFRESH</button>`
+        : `<p class="wx-miss"><b>WEATHER UNAVAILABLE</b>No report for this field. Mission generation is still available.</p>
         <button type="button" class="ghost tiny" data-wx-refresh="${isArr ? "arr" : "dep"}">REFRESH</button>`;
       return;
     }
@@ -3004,8 +3258,10 @@
     airports = (list || []).filter((a) => a && a.id).concat(extra);
     byId = new Map(airports.map((a) => [a.id, a]));
     const saved = (() => { try { return localStorage.getItem("twofly-dep"); } catch (e) { return ""; } })();
+    const homeId = state.profile && state.profile.home;
+    const homeAp = homeId && byId.get(homeId);
     if (!state.dep || !byId.get(state.dep.id)) {
-      state.dep = (saved && byId.get(saved)) || byId.get("KSKX") || airports[0] || null;
+      state.dep = (saved && byId.get(saved)) || homeAp || byId.get("KSKX") || airports[0] || null;
     } else {
       state.dep = byId.get(state.dep.id) || state.dep;
     }
@@ -3286,9 +3542,9 @@
 
       row("pay", "CAREER", "FIRST PAYCHECK", "Earn $10,000 from completed taskings.", earned, 10000),
       row("living", "CAREER", "MAKING A LIVING", "Earn $100,000 from completed taskings.", earned, 100000),
-      row("bank", "CAREER", "SIX FIGURES", "Hold $100,000 on the pilot file.", state.profile.money || 0, 100000),
-      row("fleet5", "CAREER", "FLEET OWNER", "Own five aircraft in the hangar.", (state.profile.hangar || []).length, 5),
-      row("hangar10", "CAREER", "FULL HANGAR", "Own 10 aircraft.", (state.profile.hangar || []).length, 10),
+      row("bank", "CAREER", "SIX FIGURES", "Hold $100,000 above your starting funds.", Math.max(0, (state.profile.money || 0) - (state.profile.grant || 0)), 100000),
+      row("fleet5", "CAREER", "FLEET OWNER", "Own five aircraft. The one you start with does not count.", hangarEarned(), 4),
+      row("hangar10", "CAREER", "FULL HANGAR", "Own ten aircraft. The one you start with does not count.", hangarEarned(), 9),
       row("debtfree", "CAREER", "DEBT FREE", "Repay a loan down to zero.", st.repaid || 0, 1),
       row("cash", "CAREER", "NO BANK NEEDED", "Buy an aircraft with cash on the file.", st.cashBuys || 0, 1),
       row("dealer", "CAREER", "USED AIRCRAFT DEALER", "Sell an aircraft from the hangar.", st.sold || 0, 1),
@@ -3444,9 +3700,11 @@
   }
 
   function abortMission() {
+    const m = state.active;
     const st = pilotStats();
     st.aborts = (st.aborts || 0) + 1;
     st.clean = 0;
+    if (m && reviewVoice(m)) applyStanding(standingShift({ aborted: true, customer: true }));
     saveProfile();
     sfx("abort");
     simResetWatch();
@@ -3524,7 +3782,7 @@
     if (t === "cargo" || t === "express" || t === "courier") return "cargo";
     if (t === "medevac") return "med";
     if (t === "official" || t === "rotation") return "official";
-    if (t === "bush") return m.payload && m.payload.kind === "pax" ? "pax" : "cargo";
+    if (t === "bush") return (m.pay || m.payload) && (m.pay || m.payload).kind === "pax" ? "pax" : "cargo";
     if (t === "pax" || t === "vip") return "pax";
     return "";
   }
@@ -3595,6 +3853,50 @@
     const rough = land === "HARD" || land === "ROUGH" || land === "CRITICAL";
     const firm = land === "FIRM";
     const gentle = land === "BUTTER" || land === "SMOOTH";
+    if (voice === "cargo") {
+      const cargo = cargoPhrase(m.pay || m.payload);
+      const fill = (line) => line.replaceAll("{cargo}", cargo).replaceAll("{place}", place);
+      let pool;
+      if (diverted) pool = [
+        "The {cargo} never reached {place}.",
+        "The {cargo} did not make it to {place}.",
+      ];
+      else if (!unrated && rough) pool = [
+        "The {cargo} reached {place}, though it was the worse for that landing.",
+        "The {cargo} made {place}, but the arrival left it a little the worse for wear.",
+      ];
+      else if (!unrated && firm) pool = [
+        "The {cargo} arrived at {place} intact, if a little knocked around.",
+        "The {cargo} made it to {place} in one piece. The arrival was firmer than it needed to be.",
+      ];
+      else if (late) pool = [
+        "The {cargo} reached {place} in good shape, a little later than planned.",
+        "The {cargo} arrived at {place} intact, behind the delivery window.",
+      ];
+      else if (early && timed) pool = [
+        "The {cargo} reached {place} ahead of schedule, in good shape.",
+        "The {cargo} was on the ground at {place} early, and nothing was missing.",
+      ];
+      else if (timed) pool = [
+        "The {cargo} made {place} on schedule and in good shape.",
+        "The {cargo} was at {place} right when it needed to be.",
+      ];
+      else pool = [
+        "The {cargo} arrived at {place} in good shape.",
+        "The {cargo} reached {place} intact.",
+        "The {cargo} was on the ground at {place} with nothing missing.",
+      ];
+      const bits = [fill(pick(pool))];
+      if (!diverted && !(rough && !unrated)) {
+        let extra = "";
+        if (storm) extra = "The storms around {place} did not stop it.";
+        else if (snow) extra = "It came in through the snow.";
+        else if (rain) extra = "It came in through the rain.";
+        else if (windy) extra = "It was a windy delivery into {place}.";
+        if (extra && Math.random() < 0.55) bits.push(fill(extra));
+      }
+      return { stars, text: bits.join(" "), place };
+    }
     const say = (lines) => {
       const ok = lines.filter((line) => {
         if (mode === "none" && (line.includes("{pilot}") || line.includes("{company}"))) return false;
@@ -4254,6 +4556,14 @@
       simLand: !!(simSnap && simSnap.landed),
     });
     if (review) fileReview(review);
+    const standingDelta = applyStanding(standingShift({
+      crashed,
+      review,
+      score,
+      special: m.special,
+      ifr: !!(ifrXp || ifrMoney),
+    }));
+    saveProfile();
     showDebrief({
       m,
       bonus,
@@ -4268,6 +4578,7 @@
       simLand: !!(simSnap && simSnap.landed),
       score,
       review,
+      standingDelta,
     });
     writeSortieReport(m, { crashed, score });
   }
@@ -4368,25 +4679,40 @@
   }
 
   function simStatusLine() {
-    if (!simSnap.connected) return `<p class="muted">SIM OFFLINE</p>`;
-    if (simSnap.err) return `<p class="muted">SIM ONLINE · FLIGHT NOT STARTED</p>`;
-    return `<p class="muted">SIM LIVE · ${simSnap.airborne ? "AIRBORNE" : "ON GROUND"}</p>`;
+    const s = simHeader();
+    if (s.kind === "off") return `<p class="muted">SIM WATCH OFF</p>`;
+    if (s.kind === "down") return `<p class="muted">SIM OFFLINE</p>`;
+    if (s.kind === "wait") return `<p class="muted">SIM ONLINE · FLIGHT NOT STARTED</p>`;
+    return `<p class="muted">SIM LIVE · ${s.air ? "AIRBORNE" : "ON GROUND"}</p>`;
+  }
+
+  function simHeader() {
+    const watch = !!(state.profile && state.profile.simWatch);
+    if (!watch) return { kind: "off" };
+    if (!simSnap.connected) return { kind: "down" };
+    if (simSnap.err || !simSnap.live) return { kind: "wait" };
+    return { kind: "live", air: !!simSnap.airborne };
   }
 
   function paintSimLine() {
     const el = $("#sim-line");
     if (!el) return;
+    const s = simHeader();
     el.hidden = false;
-    el.classList.toggle("off", !simSnap.connected);
-    if (!simSnap.connected) {
+    el.classList.toggle("off", s.kind !== "live");
+    if (s.kind === "off") {
+      el.textContent = "SIM WATCH OFF";
+      return;
+    }
+    if (s.kind === "down") {
       el.textContent = "SIM OFFLINE";
       return;
     }
-    if (simSnap.err) {
-      el.innerHTML = `<span class="sim-live"><i></i> SIM ONLINE · FLIGHT NOT STARTED</span>`;
+    if (s.kind === "wait") {
+      el.textContent = "SIM ONLINE · FLIGHT NOT STARTED";
       return;
     }
-    el.innerHTML = `<span class="sim-live"><i></i> SIM LIVE · ${simSnap.airborne ? "AIRBORNE" : "ON GROUND"}</span>`;
+    el.innerHTML = `<span class="sim-live"><i></i> SIM LIVE · ${s.air ? "AIRBORNE" : "ON GROUND"}</span>`;
   }
 
   function isTimed(m) {
@@ -4709,25 +5035,54 @@
       const extra = pay ? ` · ${moneyFmt(pay.money)} · +${pay.xp} XP` : "";
       return `<li><b>${esc(b.label)}</b> ${esc(b.info)}${extra}</li>`;
     }).join("");
+    const kind = (TYPES.find((x) => x.id === m.type) || {}).label || m.type || "";
+    const sp = specialById(m.special);
+    const tail = m.acTail || airframeTail(m.ac);
+    const acName = m.acName || "";
+    const landWord = score && score.landing && score.landing.word;
+    const marks = [];
+    if (score) {
+      if (landWord === "BUTTER" || landWord === "SMOOTH") marks.push("GREASED IT");
+      if ((score.letter === "S" || score.letter === "A") && !penalty) marks.push("PROFESSIONAL");
+      if (!info.crashed && !ifrXp && !info.overbank && !(simSnap && simSnap.bounce)) marks.push("CLEAN RECORD");
+      const acRow = AIRCRAFT.find((a) => a.id === m.ac);
+      if (acRow && (acRow.cls === "jet" || acRow.cls === "airliner")) marks.push("HEAVY METAL");
+      if (landWord === "HARD" || landWord === "ROUGH" || landWord === "CRITICAL" || penalty) marks.push("ROUGH DAY");
+      if (score.goAround) marks.push("GO AROUND");
+    }
+    const owned = !!(m.ac && inHangar(m.ac));
+    const hrs = owned ? airframeHours(m.ac) : 0;
+    const leftSvc = owned ? Math.max(0, SERVICE_HRS - sinceService(m.ac)) : 0;
+    const health = owned ? healthPct(m.ac) : 0;
+    const groundedNow = owned && state.profile && state.profile.serviceOn && health <= 0;
+    const delta = info.standingDelta || 0;
+    const deltaTxt = delta > 0 ? `+${delta}` : String(delta);
+    const p = state.profile || {};
+    const avg = p.repN ? ((p.repSum || 0) / p.repN).toFixed(2) : "";
     body.innerHTML = `
+      <p class="pedia-kicker">${esc(sp ? sp.title : kind)}</p>
       <h2>${esc(icaoOf(m.dep))} → ${esc(icaoOf(m.dest))}</h2>
-      <p class="muted">${esc(fieldCaption(m.dep))} → ${esc(fieldCaption(m.dest))}${timing ? " · " + timing : ""}</p>
+      <p class="muted">${esc(fieldCaption(m.dep))} → ${esc(fieldCaption(m.dest))}</p>
+      <p class="muted">${esc(acName)}${tail ? " · " + esc(tail) : ""}${m.eteMin ? " · " + fmtEte(m.eteMin) + " planned" : ""}${timing ? " · " + timing : ""}</p>
+      ${sp && !info.crashed ? `<p>${esc(sp.done)}</p>` : ""}
       ${info.review ? `<div class="review-card">
-        <p class="pedia-kicker">CUSTOMER REVIEW</p>
+        <p class="pedia-kicker">CUSTOMER</p>
         <p class="review-stars">${starGlyph(info.review.stars)} <span>${Number(info.review.stars).toFixed(1)}</span></p>
         <p class="review-line">${esc(info.review.text)}</p>
-      </div>` : (info.crashed && state.profile && state.profile.reviewsOn !== false && reviewVoice(m) ? `<p class="muted">No customer review. The flight did not finish.</p>` : "")}
+        ${avg ? `<p class="muted">${avg} average · ${p.repN} review${p.repN === 1 ? "" : "s"}</p>` : ""}
+      </div>` : (info.crashed && p.reviewsOn !== false && reviewVoice(m) ? `<p class="muted">No customer review. The flight did not finish.</p>` : "")}
       ${score ? `<div class="score-card score-${score.tone || "good"}">
-        <div class="score-letter">${esc(score.letter || score.grade || "")}</div>
+        <div class="score-letter">${esc(score.letter || "")}</div>
         <div>
-          <div class="score-grade">${esc(score.title || score.grade || "")}</div>
+          <div class="score-grade">${esc(score.title || "")}</div>
           <div class="score-cats">
             ${(score.cats || []).map((c) => `<div class="score-cat"><span>${esc(c.k)}</span><b>${c.have} / ${c.max}</b></div>`).join("")}
             <div class="score-cat score-total"><span>TOTAL</span><b>${score.pts} / 100</b></div>
           </div>
         </div>
         ${(score.notes || []).length ? `<ul class="score-notes">${score.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
-      </div>` : `<p class="muted">No sim connection. Sortie logged without a rating.</p>`}
+      </div>
+      ${marks.length ? `<div class="debrief-marks">${marks.map((x) => `<span>${esc(x)}</span>`).join("")}</div>` : ""}` : `<p class="muted">Completed without a sim rating. No landing grade was recorded.</p>`}
       <div class="wx-grid debrief-grid">
         <div><span>PAY</span><b>${moneyFmt(net)}</b></div>
         ${bonus ? `<div><span>EARLY BONUS</span><b>${moneyFmt(bonus)}</b></div>` : ""}
@@ -4735,7 +5090,12 @@
         ${ifrMoney ? `<div><span>SAFETY VIOLATION</span><b>−${moneyFmt(ifrMoney)}</b></div>` : ""}
         <div><span>XP</span><b>${info.crashed ? "0" : `+${Math.max(0, xp - ifrXp)}`}</b></div>
         ${ifrXp && !info.crashed ? `<div><span>ILLEGAL IFR</span><b>−${ifrXp} XP</b></div>` : ""}
+        <div><span>REPUTATION</span><b>${info.review ? esc(starName(info.review.stars)) + " " : ""}${deltaTxt}</b></div>
       </div>
+      ${owned ? `<p class="pedia-kicker">AIRFRAME</p>
+        <p class="debrief-air">${tail ? esc(tail) + " · " : ""}${esc(acName)} · ${hrs.toFixed(1)} hr${state.profile.serviceOn ? ` · ${Math.round(health)}% · ${leftSvc.toFixed(1)} hr to service` : ""}</p>
+        ${groundedNow ? `<p class="muted">Grounded until serviced.</p>` : ""}
+        ${info.crashed && state.profile.serviceOn ? `<p class="muted">The airframe needs service before it flies again.</p>` : ""}` : ""}
       ${info.crashed ? `<p class="muted">Crash logged${simSnap && simSnap.crashWhy ? " (" + esc(simSnap.crashWhy) + ")" : ""}. Pay and collectables did not post. A normal descent is not a crash.</p>` : ""}
       ${info.overbank && !info.crashed ? `<p class="muted">Steep bank logged. The sortie still counts.</p>` : ""}
       ${info.simLand && !info.crashed ? `<p class="muted">Arrival time taken from the sim landing, not the Complete click.</p>` : ""}
@@ -4919,7 +5279,7 @@
       <label>ACTIVE SORTIE</label>
       <article class="job on">
         <header>
-          <span class="tag tag-${m.type}">${t ? t.label : m.type}</span>
+          <span class="tag tag-${m.type}">${esc(m.specialTitle || (t ? t.label : m.type))}</span>
           <span class="pay">${payText(m, true)}</span>
         </header>
         <div class="route">
@@ -4960,7 +5320,10 @@
     const depWx = wxSnap(m.dep);
     const arrWx = wxSnap(m.dest);
     const acId = m.ac || (state.ac && state.ac.id);
-    if (simSnap.connected) m.acTail = sortieTail();
+    if (simSnap.connected) {
+      const live = sortieTail();
+      if (live) m.acTail = live;
+    }
     const crashed = !!(opts && opts.crashed);
     const ttfLeft = acId ? Math.max(0, SERVICE_HRS - sinceService(acId) - Math.round((m.eteMin / 60) * 10) / 10) : 99;
     const pay = crashed ? 0 : Math.max(0, (m.money || 0) + (bonus || 0) - (penalty || 0) - ((opts && opts.ifrMoney) || 0));
@@ -4999,6 +5362,10 @@
       state.profile.sinceService[acId] = Math.round(((state.profile.sinceService[acId] || 0) + entry.hours) * 10) / 10;
       if (crashed) state.profile.sinceService[acId] = SERVICE_HRS * (100 / WEAR_DROP);
     }
+    if (acId && m.acTail && !(state.profile.tails && state.profile.tails[acId])) {
+      state.profile.tails = state.profile.tails || {};
+      state.profile.tails[acId] = cleanTail(m.acTail);
+    }
     const st = pilotStats();
     if (crashed) st.clean = 0;
     else st.clean = (st.clean || 0) + 1;
@@ -5036,8 +5403,8 @@
   window.__twoflyPick = pickAircraft;
 
   function simOk(a) {
-    const sim = (state.profile && state.profile.sim) || "both";
-    if (!a || sim === "both" || !a.sim) return true;
+    const sim = state.profile && state.profile.sim === "20" ? "20" : "24";
+    if (!a || !a.sim) return true;
     return a.sim === sim;
   }
 
@@ -5142,11 +5509,19 @@
       el.innerHTML = "";
       return;
     }
-    const tail = sortieTail();
+    const tail = sortieTail() || (inHangar(a.id) ? airframeTail(a.id) : "");
     const call = liveCall();
+    const bits = [
+      fmtKt(a.cruise),
+      fmtNm(a.range),
+      fmtMass(a.payload),
+      `${a.pax} PAX`,
+    ];
+    if (a.minRwy) bits.push("RWY " + fmtField(a.minRwy));
+    bits.push("MAX VS " + landBands(a.cls)[2] + " FPM");
     el.innerHTML = `
       <div class="ac-ident"><span>${esc(a.maker)}</span><b>${esc(typeLabel(a))}</b></div>
-      <p class="ac-nums">${fmtKt(a.cruise)} · ${fmtNm(a.range)} · ${fmtMass(a.payload)} · ${a.pax} pax${a.minRwy ? " · " + fmtField(a.minRwy) : ""}</p>
+      <div class="ac-specs">${bits.map((b) => `<span>${esc(b)}</span>`).join("")}</div>
       ${tail ? `<p class="ac-nums">${esc(tail)}${call ? " · " + esc(call) : ""}</p>` : ""}
       ${a.note ? `<p class="ac-nums">${esc(a.note)}</p>` : ""}
       ${state.mode === "airline" && inHangar(a.id) && state.profile.serviceOn
@@ -5185,15 +5560,19 @@
     const root = $("#missions");
     if (!state.missions.length) {
       root.innerHTML = "";
+      const kick = $("#board-kicker");
+      if (kick) kick.hidden = true;
       return;
     }
+    const kick = $("#board-kicker");
+    if (kick) kick.hidden = false;
     root.innerHTML = state.missions
       .map((m) => {
         const t = TYPES.find((x) => x.id === m.type);
         return `
         <article class="job" data-id="${m.id}">
           <header>
-            <span class="tag tag-${m.type}">${t ? t.emoji + " " + t.label : m.type}</span>
+            <span class="tag tag-${m.type}">${esc(m.specialTitle || (t ? t.emoji + " " + t.label : m.type))}</span>
             <span class="pay">${payText(m, false)}</span>
           </header>
           <div class="route">
@@ -5218,7 +5597,7 @@
           ${jobLearnHtml(m)}
           <div class="notes">${m.constraints.map((c) => `<span>${c}</span>`).join("")}</div>
           <footer class="job-foot">
-            <button class="primary tiny accept" ${state.active ? "disabled" : ""}>ACCEPT TASKING</button>
+            <button class="primary accept" ${state.active ? "disabled" : ""}>ACCEPT TASKING</button>
           </footer>
         </article>`;
       })
@@ -5285,10 +5664,13 @@
         : "");
     }
     const blurbLong = $("#desk-blurb-long");
+    const deskMode = $("#desk-mode");
     if (state.mode === "airline") {
       if (blurbLong) blurbLong.textContent = "CAREER MODE is a hangar-only progression game. Certificates unlock aircraft classes and mission types when certificate locks are on. Completing a tasking adds pay and XP. Maintenance and home field apply here.";
+      if (deskMode) deskMode.textContent = "CAREER MODE · Aircraft limited to your operation. Rank, fleet, maintenance, and home base apply.";
     } else {
       if (blurbLong) blurbLong.textContent = "FREE FLIGHT lets you take civilian taskings from any airfield. Every aircraft type in your files is eligible. Completing a sortie adds the payment to your pilot file. Rank restrictions and hangar ownership do not apply.";
+      if (deskMode) deskMode.textContent = "FREE FLIGHT · Any aircraft on file. No rank or ownership restrictions.";
     }
     renderHome();
     fillJobTypes();
@@ -5306,11 +5688,9 @@
     if (meta) meta.textContent = home ? `BASE ${home.id} · ${home.n}` : "NO HOME FIELD SET";
     if (go) go.disabled = !home;
     const setMeta = $("#home-set-meta");
-    if (setMeta) setMeta.textContent = home
-      ? `CURRENT BASE ${home.id} · ${home.n}. USED BY THE HOME BUTTON IN CAREER MODE.`
-      : "USED BY THE HOME BUTTON IN CAREER MODE.";
+    if (setMeta) setMeta.textContent = "This is your base of operations. Home in Career Mode will use this airport as your starting point.";
     const homeIn = $("#home-input");
-    if (homeIn && document.activeElement !== homeIn) homeIn.value = home ? home.id : "";
+    if (homeIn && document.activeElement !== homeIn) homeIn.value = home ? `${home.id}${home.n ? " · " + home.n : ""}` : "";
   }
 
   function renderHangar() {
@@ -5323,15 +5703,16 @@
         const debt = p.debt || 0;
         const left = creditLeft();
         loanEl.innerHTML = `
-        <label>CREDIT</label>
+        <label>FINANCING</label>
         <div class="wx-grid">
-          <div><span>LOAN AVAILABLE</span><b>${moneyFmt(left)}</b></div>
-          <div><span>DEBT</span><b>${moneyFmt(debt)}</b></div>
+          <div><span>AVAILABLE</span><b>${moneyFmt(left)}</b></div>
+          <div><span>OUTSTANDING</span><b>${moneyFmt(debt)}</b></div>
           ${p.interestOn ? `<div><span>INTEREST</span><b>8% / YEAR</b></div>` : `<div><span>INTEREST</span><b>OFF</b></div>`}
         </div>
+        <p class="board-note">Available credit increases as your pilot certificate improves.</p>
         <div class="row">
           <div>
-            <label for="loan-amt">AMOUNT (${ccy().id})</label>
+            <label for="loan-amt">AMOUNT</label>
             <input id="loan-amt" type="text" inputmode="numeric" placeholder="0" autocomplete="off" />
           </div>
         </div>
@@ -5360,43 +5741,111 @@
         $("#loan-pay")?.addEventListener("click", () => go(loanRepay));
       }
     }
+    const cap = hangarCap();
+    const owned = (p.hangar || []).map((id) => AIRCRAFT.find((a) => a.id === id)).filter(Boolean);
+    const down = owned.filter((a) => p.serviceOn && healthPct(a.id) <= 0).length;
+    const ready = owned.length - down;
     const fleetLab = $("#fleet-label");
-    if (fleetLab) fleetLab.textContent = `FLEET ${p.hangar.length}/${hangarCap()}`;
-    if (fleet) {
-      const rows = p.hangar.map((id) => AIRCRAFT.find((a) => a.id === id)).filter(Boolean);
-      fleet.innerHTML = rows.map((a) => {
-        const pct = healthPct(a.id);
-        const hrs = airframeHours(a.id);
-        const since = sinceService(a.id);
-        const left = Math.max(0, SERVICE_HRS - since);
-        const leased = isLeased(a.id);
-        const dead = p.serviceOn && pct <= 0;
-        const rate = leased ? leaseRate(a) : 0;
-        const remain = leased ? leaseBuyout(a.id) : 0;
-        const paid = leased ? leasePaid(a.id) : 0;
-        const wearLine = p.serviceOn
-          ? ` · ${hrs.toFixed(1)} HR · TTS ${left.toFixed(1)} HR · ${healthHtml(a.id)}${dead ? " · GROUNDED" : ""}`
-          : ` · ${hrs.toFixed(1)} HR`;
-        return `
-        <div class="fleet-row">
-          <div>
-            <b>${a.name}</b>
-            <span class="muted">${a.maker}${wearLine}${leased ? ` · LEASED ${moneyFmt(rate)} / DAY · PAID ${moneyFmt(paid)} · BUYOUT ${moneyFmt(remain)}` : ""}</span>
-          </div>
+    const fleetCount = $("#fleet-count");
+    const fleetNote = $("#fleet-note");
+    if (fleetLab) fleetLab.textContent = "YOUR FLEET";
+    if (fleetCount) fleetCount.textContent = `${owned.length} / ${cap} AIRCRAFT`;
+    if (fleetNote) {
+      if (!owned.length) fleetNote.textContent = "The hangar is empty.";
+      else if (owned.length >= cap) fleetNote.textContent = "Fleet capacity reached.";
+      else if (down) fleetNote.textContent = `${ready} ready · ${down} in maintenance.`;
+      else if (owned.length === 1) fleetNote.textContent = "One aircraft. Plenty of places to go.";
+      else if (owned.length >= 5) fleetNote.textContent = "The operation is starting to look busy.";
+      else fleetNote.textContent = "The aircraft that keep the operation moving.";
+    }
+    const shipCard = (a) => {
+      const pct = healthPct(a.id);
+      const hrs = airframeHours(a.id);
+      const left = Math.max(0, SERVICE_HRS - sinceService(a.id));
+      const leased = isLeased(a.id);
+      const dead = p.serviceOn && pct <= 0;
+      const rate = leased ? leaseRate(a) : 0;
+      const remain = leased ? leaseBuyout(a.id) : 0;
+      const paid = leased ? leasePaid(a.id) : 0;
+      const tail = airframeTail(a.id);
+      const ident = [clsWord(a.cls), `${a.pax || 0} PAX`].join(" · ");
+      return `
+        <article class="ship${dead ? " down" : ""}">
+          <span class="ship-kicker">${esc(a.maker)}</span>
+          <b>${esc(a.name)}</b>
+          <span class="muted">${esc(ident)}</span>
+          <label class="tail-row">
+            <span>TAIL</span>
+            <input class="tail-in" data-tail="${a.id}" value="${esc(tail)}" placeholder="N123TF" maxlength="8" autocomplete="off" spellcheck="false" />
+          </label>
+          <p class="ship-state${dead ? " down" : ""}">${dead ? "MAINTENANCE REQUIRED" : "READY FOR SERVICE"}</p>
+          <p class="ship-cond">${p.serviceOn ? pct + "% CONDITION" : "SERVICE TRACKING OFF"}</p>
+          <p class="muted ship-air">AIRFRAME · ${hrs.toFixed(1)} HR${p.serviceOn ? ` · ${left.toFixed(1)} HR TTS` : ""}</p>
+          ${leased ? `<p class="muted">LEASED ${moneyFmt(rate)} / DAY · PAID ${moneyFmt(paid)} · BUYOUT ${moneyFmt(remain)}</p>` : ""}
+          ${dead ? `<p class="board-note">She's flown enough for now.</p>` : ""}
           <div class="fleet-act">
-            <button type="button" class="tiny" data-fly="${a.id}">SELECT</button>
+            <button type="button" class="tiny" data-fly="${a.id}">SELECT AIRCRAFT</button>
             ${p.serviceOn && pct < 100 ? `<button type="button" class="tiny" data-repair="${a.id}">SERVICE ${moneyFmt(repairCost(a))}</button>` : ""}
             ${leased
               ? `<button type="button" class="tiny" data-buyout="${a.id}">${remain ? "BUY OUT " + moneyFmt(remain) : "OWN"}</button>
                  <button type="button" class="ghost tiny" data-return="${a.id}">RETURN</button>`
-              : `<button type="button" class="ghost tiny" data-sell="${a.id}">SELL ${moneyFmt(sellPrice(a))}</button>`}
+              : `<button type="button" class="ghost tiny" data-sell="${a.id}">SELL · ${moneyFmt(sellPrice(a))}</button>`}
           </div>
-        </div>`;
-      }).join("") || `<p class="muted">HANGAR EMPTY.</p>`;
+        </article>`;
+    };
+    if (fleet) {
+      fleet.innerHTML = owned.map(shipCard).join("") || `<p class="muted">No aircraft in service.</p>`;
     }
     if (market) {
       const q = (state.mktQuery || "").trim().toLowerCase();
-      const filt = state.mktFilter || "all";
+      const filt = state.mktFilter === "available" ? "used" : (state.mktFilter || "all");
+      const note = $("#used-note");
+      if (note) note.hidden = filt !== "used";
+      const matchQ = (a) => !q || a.name.toLowerCase().includes(q) || a.maker.toLowerCase().includes(q) || a.cls.toLowerCase().includes(q);
+      const usedCards = () => ensureUsedBoard().map((r) => {
+        const a = AIRCRAFT.find((x) => x.id === r.id);
+        return a ? { a, r } : null;
+      }).filter((row) => {
+        if (!row || !matchQ(row.a)) return false;
+        if (filt === "used" || filt === "all") return true;
+        if (filt === "piston") return row.a.cls === "piston" || row.a.cls === "bush" || row.a.cls === "vintage";
+        if (filt === "turboprop") return row.a.cls === "turboprop";
+        return false;
+      }).map(({ a, r }) => {
+        const ask = usedAsk(a, r.pct);
+        const locked = p.locksOn && !classUnlocked(a.cls);
+        const free = !p.moneyOn;
+        const afford = free || p.money >= ask;
+        const full = p.hangar.length >= hangarCap();
+        const since = healthToSince(r.pct);
+        const tts = Math.max(0, SERVICE_HRS - since);
+        const status = locked
+          ? `REQUIRES ${certForClass(a.cls)}`
+          : full
+          ? "HANGAR FULL"
+          : !afford
+          ? "INSUFFICIENT FUNDS"
+          : `${r.pct}% · ${tts.toFixed(1)} HR TO SERVICE`;
+        return `<article class="ship">
+          <span class="ship-kicker">USED · ${esc(a.maker)}</span>
+          <b>${esc(a.name)}</b>
+          <span class="muted">${clsWord(a.cls)} · ${a.pax || 0} PAX · ${r.pct}%</span>
+          <p class="ship-price"><span class="${afford ? "price-ok" : "price-no"}">${free ? "FREE" : moneyFmt(ask)}</span></p>
+          <p class="muted">NEW ${moneyFmt(listPrice(a))}</p>
+          <p class="ship-state${locked || !afford ? " down" : ""}">${status}</p>
+          <div class="fleet-act">
+            <button type="button" class="tiny" data-buy-used="${a.id}" ${locked || full ? "disabled" : ""}>${free ? "ADD" : "BUY USED"}</button>
+          </div>
+        </article>`;
+      }).join("");
+      if (filt === "owned") {
+        market.innerHTML = owned.filter(matchQ).map(shipCard).join("") || `<p class="muted">No aircraft in the fleet match.</p>`;
+        return;
+      }
+      if (filt === "used") {
+        market.innerHTML = usedCards() || `<p class="muted">Nothing on the board matches.</p>`;
+        return;
+      }
       const list = AIRCRAFT.filter((a) => {
         if (!simOk(a)) return false;
         if (inHangar(a.id) || !airlineEligible(a)) return false;
@@ -5404,10 +5853,10 @@
         if (filt === "helo" && a.cls !== "helo" && a.cls !== "evtol") return false;
         if (filt === "piston" && a.cls !== "piston" && a.cls !== "bush" && a.cls !== "vintage") return false;
         if (filt === "turboprop" && a.cls !== "turboprop") return false;
-        if (!q) return true;
-        return a.name.toLowerCase().includes(q) || a.maker.toLowerCase().includes(q) || a.cls.toLowerCase().includes(q);
+        return matchQ(a);
       }).slice(0, 60);
-      market.innerHTML = list.map((a) => {
+      const usedHtml = usedCards();
+      market.innerHTML = (usedHtml + list.map((a) => {
         const price = listPrice(a);
         const locked = p.locksOn && !classUnlocked(a.cls);
         const free = !p.moneyOn;
@@ -5416,18 +5865,25 @@
         const priceHtml = free
           ? `<span class="price-ok">FREE</span>`
           : `<span class="${afford ? "price-ok" : "price-no"}">${moneyFmt(price)}</span>`;
-        const lockHtml = locked ? ` · <span class="lock-rank">CERT LOCK</span>` : "";
-        return `<div class="fleet-row">
-          <div>
-            <b>${a.name}</b>
-            <span class="muted">${a.maker} · ${a.cls} · ${a.pax || 0} PAX · ${priceHtml}${lockHtml}</span>
-          </div>
+        const status = locked
+          ? `REQUIRES ${certForClass(a.cls)}`
+          : full
+          ? "HANGAR FULL"
+          : !afford
+          ? "INSUFFICIENT FUNDS"
+          : "AVAILABLE";
+        return `<article class="ship">
+          <span class="ship-kicker">${esc(a.maker)}</span>
+          <b>${esc(a.name)}</b>
+          <span class="muted">${clsWord(a.cls)} · ${a.pax || 0} PAX</span>
+          <p class="ship-price">${priceHtml}</p>
+          <p class="ship-state${locked || !afford ? " down" : ""}">${status}</p>
           <div class="fleet-act">
             <button type="button" class="tiny" data-buy="${a.id}" ${locked || full ? "disabled" : ""}>${free ? "ADD" : "BUY"}</button>
-            ${free ? "" : `<button type="button" class="ghost tiny" data-lease="${a.id}" ${locked || full ? "disabled" : ""}>LEASE ${moneyFmt(leaseRate(a))}/DAY</button>`}
+            ${free ? "" : `<button type="button" class="ghost tiny lease-btn" data-lease="${a.id}" ${locked || full ? "disabled" : ""}><span>LEASE</span><b>${moneyFmt(leaseRate(a))} / DAY</b></button>`}
           </div>
-        </div>`;
-      }).join("") || `<p class="muted">NO MATCHING LISTINGS.</p>`;
+        </article>`;
+      }).join("")) || `<p class="muted">NO MATCHING LISTINGS.</p>`;
     }
   }
 
@@ -5471,7 +5927,7 @@
     if (hud) hud.value = String(scale);
     if (hudVal) hudVal.textContent = scale + "%";
     if (clock) clock.value = state.profile.clock12 ? "12" : "24";
-    if (simEl) simEl.value = state.profile.sim === "20" || state.profile.sim === "24" ? state.profile.sim : "both";
+    if (simEl) simEl.value = state.profile.sim === "20" ? "20" : "24";
     if (ccyEl) {
       if (!ccyEl.options.length) {
         ccyEl.innerHTML = CURRENCIES.map(
@@ -5738,7 +6194,7 @@
 
   function ifrRideHtml(lic) {
     if (hasIfr()) return `<p class="log-note">Instrument Rating held. IFR weather does not post a penalty.</p>`;
-    if (!lic || lic.n < 2) return `<p class="log-note">Private Pilot required before Instrument IFR checkride.</p>`;
+    if (!lic || lic.n < 2) return `<p class="log-note">Private Pilot required before Instrument Rating test.</p>`;
     const fee = ifrFee();
     const broke = fee && (state.profile.money || 0) < fee;
     return `
@@ -5889,6 +6345,33 @@
     const milesOpen = !!state.milesOpen;
     const reviews = Array.isArray(p.reviews) ? p.reviews.slice(0, 3) : [];
     const rep = p.repN ? ((p.repSum || 0) / p.repN).toFixed(2) : "";
+    const moneySum = flown.reduce((s, m) => s + (m.money || 0), 0);
+    const xpSum = flown.reduce((s, m) => s + (m.xp || 0), 0);
+    const cities = new Set(state.collection.cities || []);
+    const ports = new Set(state.collection.ports || []);
+    const opName = { pax: "PASSENGER", cargo: "CARGO", medevac: "MEDEVAC", express: "EXPRESS", vip: "VIP", official: "OFFICIAL", bush: "RESUPPLY", ferry: "REPOSITION", courier: "COURIER", rotation: "ROTATION" };
+    const opCounts = {};
+    flown.forEach((m) => { if (m.type) opCounts[m.type] = (opCounts[m.type] || 0) + 1; });
+    const opHtml = Object.keys(opName).filter((t) => opCounts[t]).map((t) => `<div><b>${opCounts[t]}</b><span>${opName[t]}</span></div>`).join("");
+    const graded = flown.filter((m) => m.grade);
+    const gradeBits = ["S", "A", "B", "C", "D", "F"].filter((g) => graded.some((m) => m.grade === g)).map((g) => `<div><b>${graded.filter((m) => m.grade === g).length}</b><span>${g}</span></div>`).join("");
+    const greased = flown.filter((m) => m.landing === "BUTTER" || m.landing === "SMOOTH").length;
+    const hardN = flown.filter((m) => m.landing === "HARD" || m.landing === "ROUGH" || m.landing === "CRITICAL").length;
+    const goes = flown.filter((m) => m.goAround).length;
+    const crashes = flown.filter((m) => m.crashed).length;
+    const serviced = Object.keys((st.services) || {}).length;
+    const lastMove = p.standingLast ? `${p.standingLast > 0 ? "+" : ""}${p.standingLast} last flight` : "No recent change";
+    const frameHtml = (p.hangar || []).map((id) => {
+      const ac = AIRCRAFT.find((a) => a.id === id);
+      if (!ac) return "";
+      const rows = flown.filter((m) => m.ac === id || m.acId === id);
+      if (!rows.length && !airframeHours(id)) return "";
+      const fh = rows.reduce((s, m) => s + (m.hours || 0), 0);
+      const fd = rows.reduce((s, m) => s + (m.dist || 0), 0);
+      const tail = airframeTail(id);
+      const svc = p.serviceOn ? ` · ${Math.max(0, SERVICE_HRS - sinceService(id)).toFixed(1)} hr to service` : "";
+      return `<p class="log-note"><b>${esc(tail || ac.name)}</b>${tail ? " · " + esc(ac.name) : ""} · ${rows.length} flights · ${fh.toFixed(1)} hr · ${fmtNm(fd)} · ${Math.round(healthPct(id))}%${svc}</p>`;
+    }).join("");
     el.innerHTML = `
       <section class="log-card log-career">
         <h2 class="log-rank">${esc(lic.name)}</h2>
@@ -5904,18 +6387,48 @@
           <div><b>${career.length}</b><span>CAREER</span></div>
           <div><b>${hours.toFixed(1)}</b><span>HOURS</span></div>
           <div><b>${fmtNm(nm)}</b><span>DISTANCE</span></div>
-          <div><b>${fields.size}</b><span>AIRFIELDS</span></div>
-          <div><b>${acIds.size}</b><span>AIRCRAFT</span></div>
-          <div><b>${marks.size}</b><span>LANDMARKS</span></div>
+          <div><b>${moneyFmt(moneySum)}</b><span>EARNED</span></div>
+          <div><b>${xpSum}</b><span>XP</span></div>
+          <div><b>${Math.max(0, (Number(p.certN) || 1) - 1)}</b><span>CERTIFICATES</span></div>
         </div>
+        ${opHtml ? `<h3 class="log-sub">OPERATIONS</h3><div class="log-stats">${opHtml}</div>` : ""}
       </section>
       <section class="log-card log-rep">
         <h3>REPUTATION</h3>
-        ${rep ? `<p class="log-rep-score">${rep} ★</p>
-          <p class="log-rep-count">${p.repN} customer review${p.repN === 1 ? "" : "s"}</p>
+        ${rep ? `<p class="log-rep-score">${esc(starName(Number(rep)))}</p>
+          <p class="log-rep-count">${rep} ★ · ${p.repN} customer review${p.repN === 1 ? "" : "s"}</p>
+          ${p.standingLast ? `<p class="log-note">${esc(lastMove)}</p>` : ""}
           ${reviews.map((r) => `<div class="log-quote"><p class="review-stars">${starGlyph(r.stars)}</p><p>${esc(r.text || "")}</p></div>`).join("")}`
           : `<p class="log-note">No customer reviews yet.</p>`}
       </section>
+      <section class="log-card">
+        <h3>AIRCRAFT</h3>
+        <div class="log-stats">
+          <div><b>${hangarEarned()}</b><span>ADDED</span></div>
+          <div><b>${acIds.size}</b><span>FLOWN</span></div>
+          <div><b>${serviced}</b><span>SERVICED</span></div>
+        </div>
+        ${frameHtml}
+      </section>
+      <section class="log-card">
+        <h3>EXPLORATION</h3>
+        <div class="log-stats">
+          <div><b>${fields.size}</b><span>AIRFIELDS</span></div>
+          <div><b>${marks.size}</b><span>LANDMARKS</span></div>
+          <div><b>${cities.size}</b><span>CITIES</span></div>
+          <div><b>${ports.size}</b><span>POSTCARDS</span></div>
+        </div>
+      </section>
+      ${graded.length ? `<section class="log-card">
+        <h3>SIM RATINGS</h3>
+        <div class="log-stats">${gradeBits}
+          ${greased ? `<div><b>${greased}</b><span>GREASED</span></div>` : ""}
+          ${hardN ? `<div><b>${hardN}</b><span>HARD</span></div>` : ""}
+          ${goes ? `<div><b>${goes}</b><span>GO-AROUND</span></div>` : ""}
+          ${crashes ? `<div><b>${crashes}</b><span>CRASH</span></div>` : ""}
+        </div>
+        <p class="log-note">Flights without a sim rating are not included.</p>
+      </section>` : ""}
       <section class="log-card log-mile-card">
         <button type="button" class="log-miles-toggle" id="log-miles">
           <span>MILESTONES · ${earned.length} COMPLETED</span>
@@ -5927,19 +6440,7 @@
   }
 
   function renderLog() {
-    const { flown } = flownStats();
-    const xp = flown.reduce((s, m) => s + (m.xp || 0), 0);
-    const rk = rankFor(state.profile.xp || xp);
-    const stats = $("#pilot-stats");
-    if (stats) stats.innerHTML = "";
-    const bar = $("#xp-bar");
-    if (bar) {
-      const lo = rk.xp;
-      const hi = rk.next ? rk.next.xp : lo;
-      const pct = rk.next ? Math.min(100, Math.round((((state.profile.xp || xp) - lo) / Math.max(1, hi - lo)) * 100)) : 100;
-      bar.style.width = pct + "%";
-    }
-      renderRank();
+    renderRank();
     renderCareerFile();
     const root = $("#log");
     if (!root) return;
@@ -5954,7 +6455,7 @@
           ? `${m.xp || xpFor(m)} XP · ${moneyFmt(m.money || 0)}`
           : moneyFmt(m.money || 0);
         const when = fmtDate(m.flownAt || m.acceptedAt);
-        const kind = TYPES.find((t) => t.id === m.type)?.label || m.type;
+        const kind = m.specialTitle || TYPES.find((t) => t.id === m.type)?.label || m.type;
         const grade = m.grade ? `${m.grade}${m.score != null ? " " + m.score : ""}` : "";
         return `
         <article class="sortie">
@@ -5966,7 +6467,7 @@
             <button class="ghost tiny copy-log" data-id="${m.id}">COPY</button>
           </div>
           <p class="sortie-meta">${mode}${when ? " · " + when : ""}${grade ? " · " + grade : ""} · ${kind} · ${fmtNm(m.dist)}</p>
-          <p class="sortie-ship">${esc(m.acName || "")}${m.flown ? " · FLOWN" : ""}${pay ? " · " + pay : ""}</p>
+          <p class="sortie-ship">${esc(m.acTail ? m.acTail + " · " : "")}${esc(m.acName || "")}${m.flown ? " · FLOWN" : ""}${pay ? " · " + pay : ""}</p>
         </article>`;
       })
       .join("");
@@ -6184,10 +6685,14 @@
         state.profile.home = a.id;
         saveProfile();
         homeBox.hidden = true;
+        selectDep(a);
         renderHome();
       };
+      homeIn.addEventListener("focus", () => homeIn.select());
       homeIn.addEventListener("input", () => {
-        const hits = searchAirports(homeIn.value);
+        const raw = homeIn.value || "";
+        const q = raw.includes(" · ") ? raw.split(" · ")[0] : raw;
+        const hits = searchAirports(q);
         if (!hits.length) {
           homeBox.hidden = true;
           return;
@@ -6202,7 +6707,9 @@
       });
       homeIn.addEventListener("keydown", (e) => {
         if (e.key === "Enter") {
-          const hits = searchAirports(homeIn.value);
+          const raw = homeIn.value || "";
+          const q = raw.includes(" · ") ? raw.split(" · ")[0] : raw;
+          const hits = searchAirports(q);
           if (hits[0]) pickHome(hits[0]);
         }
       });
@@ -6609,7 +7116,7 @@
     $("#set-simwatch")?.addEventListener("change", (e) => {
       state.profile.simWatch = e.target.checked;
       saveProfile();
-      pollSim().then(() => { if (state.active) renderActive(); });
+      pollSim().then(() => { paintSimLine(); if (state.active) renderActive(); });
     });
     $("#set-reviews")?.addEventListener("change", (e) => {
       state.profile.reviewsOn = e.target.checked;
@@ -6636,7 +7143,7 @@
     });
     $("#set-sim")?.addEventListener("change", (e) => {
       const v = e.target.value;
-      state.profile.sim = v === "20" || v === "24" ? v : "both";
+      state.profile.sim = v === "20" ? "20" : "24";
       saveProfile();
       if (state.ac && !simOk(state.ac)) state.ac = null;
       renderAircraft();
@@ -6678,10 +7185,25 @@
       state.mktQuery = e.target.value;
       renderHangar();
     });
+    $("#view-hangar")?.addEventListener("change", (e) => {
+      const input = e.target.closest("[data-tail]");
+      if (!input) return;
+      setAirframeTail(input.dataset.tail, input.value);
+      input.value = cleanTail(input.value);
+      renderAcMeta();
+      sfx("select");
+    });
+    $("#view-hangar")?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && e.target.closest("[data-tail]")) {
+        e.preventDefault();
+        e.target.blur();
+      }
+    });
     $("#view-hangar")?.addEventListener("click", (e) => {
       const fly = e.target.closest("[data-fly]");
       const sell = e.target.closest("[data-sell]");
       const buy = e.target.closest("[data-buy]");
+      const usedBuy = e.target.closest("[data-buy-used]");
       const lease = e.target.closest("[data-lease]");
       const ret = e.target.closest("[data-return]");
       const buyout = e.target.closest("[data-buyout]");
@@ -6702,6 +7224,9 @@
           const row = sell.closest(".fleet-row");
           if (row) row.remove();
         }
+      } else if (usedBuy) {
+        err = buyUsed(usedBuy.dataset.buyUsed);
+        if (!err) sfx("money");
       } else if (buy) {
         err = buyAircraft(buy.dataset.buy);
         if (!err) sfx("money");
@@ -6740,8 +7265,8 @@
           note.hidden = true;
           note.textContent = "";
         }
-        const lab = $("#fleet-label");
-        if (lab && state.profile) lab.textContent = `FLEET ${state.profile.hangar.length}/${hangarCap()}`;
+        const lab = $("#fleet-count");
+        if (lab && state.profile) lab.textContent = `${state.profile.hangar.length} / ${hangarCap()} AIRCRAFT`;
       }
       setTimeout(() => {
         renderHangar();
@@ -7029,6 +7554,8 @@
     renderActive();
     renderSettings();
     renderRank();
+    flushStore();
+    setTimeout(function () { location.reload(); }, 60);
   }
 
   function hydrateStore() {

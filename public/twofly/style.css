@@ -59,7 +59,7 @@ body {
   color: var(--ink);
   line-height: 1.5;
 }
-.wrap { max-width: 1240px; margin: 0 auto; padding: 24px 20px 72px; }
+.wrap { max-width: 1360px; margin: 0 auto; padding: 24px 20px 72px; }
 header.top {
   display: flex; justify-content: space-between; gap: 20px; align-items: center;
   margin-bottom: 16px; flex-wrap: wrap;
@@ -165,6 +165,36 @@ header.top {
   align-items: start;
 }
 .desk-col { display: grid; gap: 14px; }
+.mission-board { margin-bottom: 14px; }
+.board-note { margin: -2px 0 0; color: var(--muted); font-size: .88rem; }
+#dep-random { width: 100%; margin-top: 10px; min-height: 44px; }
+.ac-specs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.ac-specs span {
+  background: var(--chip); border: 1px solid var(--line); border-radius: 999px;
+  padding: 4px 10px; font-size: .78rem; color: var(--muted); letter-spacing: .03em;
+}
+.desk-mode { letter-spacing: .03em; }
+.wx-miss { margin: 0; color: var(--muted); line-height: 1.45; }
+.wx-miss b { display: block; color: var(--ink); letter-spacing: .08em; font-weight: 600; margin-bottom: 4px; }
+#flight-board { margin-bottom: 14px; }
+#flight-board .issue-kicker { margin: 0 0 10px; }
+#missions { counter-reset: task; }
+.job { counter-increment: task; position: relative; padding: 20px 22px; }
+.job::before {
+  content: "TASKING " counter(task, decimal-leading-zero);
+  display: block;
+  letter-spacing: .16em;
+  font-size: .72rem;
+  color: var(--accent2);
+  margin-bottom: 8px;
+}
+@media (min-width: 821px) {
+  .wx-stack { grid-template-columns: 1fr 1fr; gap: 0 22px; }
+  .wx-slot + .wx-slot { border-top: 0; border-left: 1px solid var(--line); padding: 2px 0 2px 22px; }
+}
+@media (max-width: 720px) {
+  .mission-board .row, .ac-pick { grid-template-columns: 1fr; }
+}
 @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
 
 label { display: block; font-size: .72rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
@@ -249,7 +279,7 @@ body.mode-airline .home-row { display: flex; }
 .dep-facts { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-top: 8px; color: var(--muted); font-size: .86rem; }
 .ac-ident { margin-top: 12px; }
 .ac-ident span { display: block; letter-spacing: .14em; font-size: .72rem; color: var(--muted); }
-.ac-ident b { display: block; font-size: 1.25rem; letter-spacing: .03em; line-height: 1.2; margin-top: 2px; }
+.ac-ident b { display: block; font-size: 1.55rem; letter-spacing: .04em; line-height: 1.15; margin-top: 2px; }
 .ac-nums { margin: 6px 0 0; color: var(--muted); font-size: .9rem; }
 .actions {
   display: flex;
@@ -285,7 +315,7 @@ button#go {
 .chip-rank { letter-spacing: .1em; }
 .chip-xp, .chip-next { font-size: .82rem !important; letter-spacing: .04em !important; }
 .chip-cash { font-size: 1.25rem; margin-top: 6px; }
-.xp-track { margin-top: 6px; background: #152228; }
+.xp-track { margin-top: 6px; height: 6px; width: 100%; background: #152228; border-radius: 99px; overflow: hidden; }
 .log-panel { margin-top: 8px; }
 .log-panel h2, .panel > label, .album-h { letter-spacing: .12em; }
 .filters { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
@@ -346,7 +376,7 @@ button.ghost.tiny { padding: 4px 9px; font-size: .78rem; }
 }
 .route span { color: var(--muted); font-size: .85rem; }
 .stats { display: flex; flex-wrap: wrap; gap: 8px 14px; color: var(--muted); font-size: .88rem; }
-.brief { line-height: 1.55; margin: 12px 0 8px; color: #d7e2de; font-size: .95rem; max-width: 62ch; }
+.brief { line-height: 1.55; margin: 14px 0 8px; color: #d7e2de; font-size: 1.05rem; max-width: 70ch; }
 .notes { display: flex; flex-wrap: wrap; gap: 6px; }
 .job footer, .job-foot { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
 .fpm-lab { color: var(--muted); font-size: .8rem; display: flex; align-items: center; gap: 6px; }
@@ -432,7 +462,7 @@ code { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: .85em; 
 .wx-cat.cat-IFR { color: #e6c35c; }
 .wx-cat.cat-LIFR { color: #e07a7a; }
 .xp-track { margin-top: 8px; height: 6px; width: min(280px, 100%); background: #2a2630; border-radius: 99px; overflow: hidden; }
-#xp-bar { height: 100%; width: 0; background: var(--accent2); }
+.xp-track > div { display: block; height: 100%; background: var(--accent2); }
 
 .album-h { font-size: .85rem; font-weight: 500; color: var(--muted); margin: 16px 0 8px; }
 .album {
@@ -533,6 +563,16 @@ button[disabled] { opacity: .4; pointer-events: none; }
 .debrief-list { margin: 0 0 14px; padding-left: 1.1em; }
 .debrief-list li { margin: 4px 0; }
 .debrief-grid { margin: 12px 0 16px; }
+.debrief-marks { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 14px; }
+.debrief-marks span {
+  font-size: 0.72rem;
+  letter-spacing: .08em;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--accent2);
+}
+.debrief-air { margin: 0 0 12px; }
 .score-card {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -720,7 +760,32 @@ button.post.postcard .post-code, button.post.postcard .post-name {
   font-size: .72rem;
 }
 .career-ratings span.have { color: var(--accent2); border-color: var(--accent2); }
-.fleet, .market { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 420px; overflow: auto; }
+.fleet, .market { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.market { max-height: 520px; overflow: auto; }
+.fleet-count {
+  margin: 2px 0 0;
+  font-size: 1.15rem;
+  letter-spacing: .08em;
+  color: var(--ink);
+}
+.ship {
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 16px 18px;
+  background: var(--bg);
+}
+.ship-kicker { display: block; letter-spacing: .14em; font-size: .72rem; color: var(--muted); }
+.ship b { display: block; font-size: 1.28rem; letter-spacing: .04em; line-height: 1.2; margin-top: 2px; }
+.ship .muted { display: block; margin-top: 4px; }
+.ship-state { margin: 12px 0 0; letter-spacing: .1em; font-size: .78rem; color: var(--accent2); }
+.ship-state.down { color: var(--accent); }
+.ship-cond, .ship-air, .ship-price { margin: 4px 0 0; }
+.ship-price { font-size: 1.15rem; }
+.tail-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+.tail-row span { letter-spacing: .12em; font-size: .72rem; color: var(--muted); }
+.tail-in { width: 9.5em; min-height: 36px; letter-spacing: .08em; text-transform: uppercase; }
+.lease-btn { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.25; text-align: left; }
+.lease-btn b { font-size: .78rem; letter-spacing: .04em; }
 .fleet-row {
   display: flex; justify-content: space-between; gap: 10px; align-items: center;
   border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg);
@@ -870,12 +935,12 @@ body.mode-airline label[for="ac-search"] { display: none; }
   line-height: 1.4;
 }
 .log-card h3 {
-  margin: 0 0 12px;
-  font-size: .72rem;
-  font-weight: 500;
-  letter-spacing: .16em;
-  color: var(--muted);
+  margin: 0 0 10px;
+  font-size: 0.72rem;
+  letter-spacing: .14em;
+  color: var(--accent2);
 }
+.log-sub { margin-top: 16px; }
 .log-stats {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

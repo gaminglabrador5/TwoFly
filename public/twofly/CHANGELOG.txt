@@ -5,6 +5,89 @@ Pack: TwoFly.exe + README.txt + LICENSE + CHANGELOG.txt
 Windows 10/11 64-bit. Double-click. No installer. No Community folder. No sim connection.
 
 --------------------------------------------------------------------------
+26 Sep 2026 — v1.9.86 Tail numbers
+--------------------------------------------------------------------------
+- Each aircraft in the hangar has a tail field. A tail you type is kept. If you leave it blank, the simulator registration is saved after a flight.
+
+--------------------------------------------------------------------------
+26 Sep 2026 — v1.9.85 Used filter
+--------------------------------------------------------------------------
+- Used aircraft sit in the main market. The Available filter is now Used. Today's eight listings also lead the full list and the matching class filters.
+
+--------------------------------------------------------------------------
+26 Sep 2026 — v1.9.84 Used aircraft
+--------------------------------------------------------------------------
+- The hangar has a used board. Eight listings a day, piston through turboprop, under 12 seats. They cost less than new and arrive below full health. Jets, rotorcraft, and anything with 12 or more seats stay on the new market.
+
+--------------------------------------------------------------------------
+26 Sep 2026 — v1.9.83 Desk fixes
+--------------------------------------------------------------------------
+- The pilot XP bar stays filled. It was being cleared whenever the log redrew.
+- Simulator is MSFS 2020 or MSFS 2024. The both choice and its note are gone.
+- The clock note under settings is gone.
+- The home field box shows the current base. Choosing one starts the desk there until you pick another departure.
+
+--------------------------------------------------------------------------
+26 Sep 2026 — v1.9.82 Hangar
+--------------------------------------------------------------------------
+- The hangar leads with the fleet. Financing sits under it. The market cards name the aircraft, the price, and whether it needs a certificate, more money, or room in the hangar.
+
+--------------------------------------------------------------------------
+26 Sep 2026 — v1.9.81 Dispatch desk
+--------------------------------------------------------------------------
+- The desk reads as a dispatch desk. Where you are, the aircraft, and the mission board are separate. Issued taskings sit on the flight board. Free Flight and Career Mode keep the same desk and say which rules apply.
+
+--------------------------------------------------------------------------
+26 Sep 2026 — v1.9.80 Sim line
+--------------------------------------------------------------------------
+- The header says SIM WATCH OFF when that setting is off, and SIM OFFLINE when the simulator is not running. SIM LIVE is only shown while aircraft data is actually arriving.
+
+--------------------------------------------------------------------------
+26 Sep 2026 — v1.9.79 MSFS 2020 flight
+--------------------------------------------------------------------------
+- A 2020 flight connects and records the landing. The missing crash event is no longer treated as a bad aircraft field, so it does not rebuild the data request. Tail number is requested without a fake unit.
+
+--------------------------------------------------------------------------
+25 Sep 2026 — v1.9.78 Landmark stamps
+--------------------------------------------------------------------------
+- The rest of the landmark postmarks are in. Dry Tortugas is now Fort Jefferson, Hawaiʻi Volcanoes is now the USS Arizona Memorial, and the Lincoln Memorial is the new one. 150 landmarks, each with a stamp.
+
+--------------------------------------------------------------------------
+25 Sep 2026 — v1.9.77 Sim Watch on MSFS 2020
+--------------------------------------------------------------------------
+- Sim Watch uses the same landing, crash, and position variables in 2020 and 2024. When 2020 is the sim that is running, TwoFly tries a 2020 SimConnect library first, then the included one.
+
+--------------------------------------------------------------------------
+25 Sep 2026 — v1.9.76 Clear all reloads
+--------------------------------------------------------------------------
+- Clear All Progress writes the empty pilot file and reloads the page, so the open window cannot keep showing the old career.
+
+--------------------------------------------------------------------------
+25 Sep 2026 — v1.9.75 New profile progress
+--------------------------------------------------------------------------
+- A cleared profile no longer counts the starter airplane toward fleet achievements or career progress. Hours and service stay blank until that airplane has actually flown.
+
+--------------------------------------------------------------------------
+25 Sep 2026 — v1.9.74 Cargo name, star names, fresh progress
+--------------------------------------------------------------------------
+- A cargo review uses the same goods named in the tasking. Reputation words follow the stars: Poor, Uneven, Fair, Good, Excellent. A brand-new file no longer counts starting cash toward Six Figures, and an unflown airplane is not listed as a flown airframe.
+
+--------------------------------------------------------------------------
+25 Sep 2026 — v1.9.73 Career polish
+--------------------------------------------------------------------------
+- The debrief now shows the flight, the customer, the money, the reputation change, and the airframe together. Standing nudges pay grades and which jobs show up, without locking the board. A hangar airplane keeps its tail when the sim has one. Rare medical, official, resupply, and express taskings use the same completion path. The logbook adds operations, aircraft, exploration, and sim ratings from flights already on file.
+
+--------------------------------------------------------------------------
+25 Sep 2026 — v1.9.72 Cargo reviews
+--------------------------------------------------------------------------
+- A cargo review is about the load arriving, not a passenger who would fly again. The goods depend on what the aircraft can carry.
+
+--------------------------------------------------------------------------
+24 Sep 2026 — v1.9.70 Credits, tail, landing rate
+--------------------------------------------------------------------------
+- About credits RaisinRum for the logo and GPT for writing. A missing tail number is left blank. Aircraft stats show the firm landing rate in feet per minute, labeled apart from runway length.
+
+--------------------------------------------------------------------------
 24 Sep 2026 — v1.9.69 Logbook layout
 --------------------------------------------------------------------------
 - The logbook is split into rank, statistics, reputation, milestones, and flight history. The old summary line under the career file is gone. Clear Log sits aside as a quiet control.
